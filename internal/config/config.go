@@ -4,7 +4,7 @@ package config
 import "os"
 
 const (
-	DefaultAPIURL = "http://localhost:4930"
+	DefaultAPIURL = "http://127.0.0.1:8000"
 	EnvAPIURL     = "FMSG_API_URL"
 )
 

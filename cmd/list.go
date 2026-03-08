@@ -17,8 +17,9 @@ var (
 )
 
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List messages for the authenticated user",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List messages for the authenticated user",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		creds, err := auth.LoadValid()
 		if err != nil {
