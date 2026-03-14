@@ -50,8 +50,14 @@ var sendCmd = &cobra.Command{
 
 		// Build a draft payload.
 		payload, err := json.Marshal(map[string]interface{}{
-			"msg_to": []string{recipient},
-			"data":   string(data),
+			"from":    creds.User,
+			"to":      []string{recipient},
+			"version": 1,
+			"flags":   0,
+			"type":    "text/plain",
+			"size":    len(data),
+			"topic":   "",
+			"data":    string(data),
 		})
 		if err != nil {
 			return fmt.Errorf("encoding message: %w", err)
