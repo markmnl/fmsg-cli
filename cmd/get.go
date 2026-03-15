@@ -29,16 +29,17 @@ var getCmd = &cobra.Command{
 		}
 
 		to, _ := json.Marshal(msg.To)
-		fmt.Printf("ID:   %s\n", msg.ID)
 		fmt.Printf("From: %s\n", msg.From)
 		fmt.Printf("To:   %s\n", string(to))
-		if len(msg.Data) > 0 && string(msg.Data) != "null" {
-			var pretty interface{}
-			if err := json.Unmarshal(msg.Data, &pretty); err == nil {
-				b, _ := json.MarshalIndent(pretty, "", "  ")
-				fmt.Printf("Data:\n%s\n", string(b))
-			} else {
-				fmt.Printf("Data: %s\n", string(msg.Data))
+		if msg.Topic != "" {
+			fmt.Printf("Topic: %s\n", msg.Topic)
+		}
+		fmt.Printf("Type: %s\n", msg.Type)
+		fmt.Printf("Size: %d\n", msg.Size)
+		if len(msg.Attachments) > 0 {
+			fmt.Println("Attachments:")
+			for _, a := range msg.Attachments {
+				fmt.Printf("  %s (%d bytes)\n", a.Filename, a.Size)
 			}
 		}
 		return nil

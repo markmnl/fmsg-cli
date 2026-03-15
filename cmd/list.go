@@ -40,7 +40,7 @@ var listCmd = &cobra.Command{
 
 		for _, msg := range messages {
 			to, _ := json.Marshal(msg.To)
-			fmt.Printf("ID: %s  From: %s  To: %s\n", msg.ID, msg.From, string(to))
+			fmt.Printf("ID: %d  From: %s  To: %s\n", msg.ID, msg.From, string(to))
 		}
 		return nil
 	},

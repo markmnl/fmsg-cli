@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/markmnl/fmsg-cli/internal/api"
 	"github.com/markmnl/fmsg-cli/internal/auth"
@@ -22,11 +23,15 @@ var delCmd = &cobra.Command{
 		}
 
 		client := api.New(config.GetAPIURL(), creds.Token)
-		if err := client.DeleteMessage(args[0]); err != nil {
+		msgID, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid message ID: %w", err)
+		}
+		if err := client.DeleteMessage(msgID); err != nil {
 			return err
 		}
 
-		fmt.Printf("Message %s deleted\n", args[0])
+		fmt.Printf("Message %d deleted\n", msgID)
 		return nil
 	},
 }

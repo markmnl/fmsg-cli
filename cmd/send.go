@@ -75,7 +75,7 @@ var sendCmd = &cobra.Command{
 		}
 
 		fmt.Println("Message sent successfully")
-		fmt.Printf("ID: %s\n", draft.ID)
+		fmt.Printf("ID: %d\n", draft.ID)
 		return nil
 	},
 }

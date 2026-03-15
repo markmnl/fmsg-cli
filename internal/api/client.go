@@ -64,16 +64,48 @@ func checkStatus(resp *http.Response) error {
 	return &apiError{StatusCode: resp.StatusCode, Body: msg}
 }
 
-// Message represents a message returned by the API.
+// Attachment represents a file attachment associated with a message.
+type Attachment struct {
+	Size     int    `json:"size"`
+	Filename string `json:"filename"`
+}
+
+// MessageListItem represents a message in the list response.
+type MessageListItem struct {
+	ID          int64        `json:"id"`
+	Version     int          `json:"version"`
+	Flags       int          `json:"flags"`
+	PID         *int64       `json:"pid"`
+	From        string       `json:"from"`
+	To          []string     `json:"to"`
+	Time        *float64     `json:"time"`
+	Topic       string       `json:"topic"`
+	Type        string       `json:"type"`
+	Size        int          `json:"size"`
+	Attachments []Attachment `json:"attachments"`
+}
+
+// Message represents a fmsg message as exchanged over the HTTP API.
 type Message struct {
-	ID   string          `json:"id"`
-	From string          `json:"msg_from"`
-	To   []string        `json:"msg_to"`
-	Data json.RawMessage `json:"data,omitempty"`
+	Version     int          `json:"version"`
+	Flags       int          `json:"flags"`
+	PID         *int64       `json:"pid"`
+	From        string       `json:"from"`
+	To          []string     `json:"to"`
+	Time        *float64     `json:"time"`
+	Topic       string       `json:"topic"`
+	Type        string       `json:"type"`
+	Size        int          `json:"size"`
+	Attachments []Attachment `json:"attachments"`
+}
+
+// CreateMessageResponse is the response from creating a message.
+type CreateMessageResponse struct {
+	ID int64 `json:"id"`
 }
 
 // ListMessages returns messages for the authenticated user.
-func (c *Client) ListMessages(limit, offset int) ([]Message, error) {
+func (c *Client) ListMessages(limit, offset int) ([]MessageListItem, error) {
 	u, err := url.Parse(c.BaseURL + "/api/v1/messages")
 	if err != nil {
 		return nil, err
@@ -102,7 +134,7 @@ func (c *Client) ListMessages(limit, offset int) ([]Message, error) {
 		return nil, err
 	}
 
-	var messages []Message
+	var messages []MessageListItem
 	if err := json.NewDecoder(resp.Body).Decode(&messages); err != nil {
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}
@@ -134,7 +166,7 @@ func (c *Client) GetMessage(id string) (*Message, error) {
 }
 
 // CreateMessage creates a new draft message. body is optional JSON payload.
-func (c *Client) CreateMessage(body []byte) (*Message, error) {
+func (c *Client) CreateMessage(body []byte) (*CreateMessageResponse, error) {
 	var bodyReader io.Reader
 	if len(body) > 0 {
 		bodyReader = bytes.NewReader(body)
@@ -158,16 +190,16 @@ func (c *Client) CreateMessage(body []byte) (*Message, error) {
 		return nil, err
 	}
 
-	var msg Message
-	if err := json.NewDecoder(resp.Body).Decode(&msg); err != nil {
+	var resp2 CreateMessageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&resp2); err != nil {
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}
-	return &msg, nil
+	return &resp2, nil
 }
 
 // SendMessage sends a draft message by ID.
-func (c *Client) SendMessage(id string) error {
-	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/v1/messages/"+id+"/send", nil)
+func (c *Client) SendMessage(id int64) error {
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/v1/messages/"+strconv.FormatInt(id, 10)+"/send", nil)
 	if err != nil {
 		return err
 	}
@@ -182,8 +214,8 @@ func (c *Client) SendMessage(id string) error {
 }
 
 // DeleteMessage deletes a message by ID.
-func (c *Client) DeleteMessage(id string) error {
-	req, err := http.NewRequest(http.MethodDelete, c.BaseURL+"/api/v1/messages/"+id, nil)
+func (c *Client) DeleteMessage(id int64) error {
+	req, err := http.NewRequest(http.MethodDelete, c.BaseURL+"/api/v1/messages/"+strconv.FormatInt(id, 10), nil)
 	if err != nil {
 		return err
 	}
