@@ -12,6 +12,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var sendPID int64
+
 var sendCmd = &cobra.Command{
 	Use:   "send <recipient> <file|text>",
 	Short: "Send a message to a recipient",
@@ -49,7 +51,7 @@ var sendCmd = &cobra.Command{
 		}
 
 		// Build a draft payload.
-		payload, err := json.Marshal(map[string]interface{}{
+		msg := map[string]interface{}{
 			"from":    creds.User,
 			"to":      []string{recipient},
 			"version": 1,
@@ -58,7 +60,11 @@ var sendCmd = &cobra.Command{
 			"size":    len(data),
 			"topic":   "",
 			"data":    string(data),
-		})
+		}
+		if cmd.Flags().Changed("pid") {
+			msg["pid"] = sendPID
+		}
+		payload, err := json.Marshal(msg)
 		if err != nil {
 			return fmt.Errorf("encoding message: %w", err)
 		}
@@ -81,5 +87,6 @@ var sendCmd = &cobra.Command{
 }
 
 func init() {
+	sendCmd.Flags().Int64VarP(&sendPID, "pid", "p", 0, "parent message ID (optional)")
 	rootCmd.AddCommand(sendCmd)
 }
