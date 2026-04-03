@@ -76,7 +76,6 @@ type MessageListItem struct {
 	Version     int          `json:"version"`
 	HasPID      bool         `json:"has_pid"`
 	HasAddTo    bool         `json:"has_add_to"`
-	CommonType  bool         `json:"common_type"`
 	Important   bool         `json:"important"`
 	NoReply     bool         `json:"no_reply"`
 	Deflate     bool         `json:"deflate"`
@@ -96,7 +95,6 @@ type Message struct {
 	Version     int          `json:"version"`
 	HasPID      bool         `json:"has_pid"`
 	HasAddTo    bool         `json:"has_add_to"`
-	CommonType  bool         `json:"common_type"`
 	Important   bool         `json:"important"`
 	NoReply     bool         `json:"no_reply"`
 	Deflate     bool         `json:"deflate"`
@@ -130,7 +128,7 @@ type AddRecipientsResponse struct {
 
 // ListMessages returns messages for the authenticated user.
 func (c *Client) ListMessages(limit, offset int) ([]MessageListItem, error) {
-	u, err := url.Parse(c.BaseURL + "/api/v1/messages")
+	u, err := url.Parse(c.BaseURL + "/fmsg")
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +165,7 @@ func (c *Client) ListMessages(limit, offset int) ([]MessageListItem, error) {
 
 // GetMessage retrieves a single message by ID.
 func (c *Client) GetMessage(id string) (*Message, error) {
-	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/api/v1/messages/"+id, nil)
+	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/fmsg/"+id, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +194,7 @@ func (c *Client) CreateMessage(body []byte) (*CreateMessageResponse, error) {
 		bodyReader = bytes.NewReader(body)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/v1/messages", bodyReader)
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/fmsg", bodyReader)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +221,7 @@ func (c *Client) CreateMessage(body []byte) (*CreateMessageResponse, error) {
 
 // SendMessage sends a draft message by ID.
 func (c *Client) SendMessage(id int64) (*SendMessageResponse, error) {
-	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/v1/messages/"+strconv.FormatInt(id, 10)+"/send", nil)
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/fmsg/"+strconv.FormatInt(id, 10)+"/send", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +250,7 @@ func (c *Client) AddRecipients(id int64, addTo []string) (*AddRecipientsResponse
 		return nil, fmt.Errorf("encoding request: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/v1/messages/"+strconv.FormatInt(id, 10)+"/add-to", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/fmsg/"+strconv.FormatInt(id, 10)+"/add-to", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +275,7 @@ func (c *Client) AddRecipients(id int64, addTo []string) (*AddRecipientsResponse
 
 // DeleteMessage deletes a message by ID.
 func (c *Client) DeleteMessage(id int64) error {
-	req, err := http.NewRequest(http.MethodDelete, c.BaseURL+"/api/v1/messages/"+strconv.FormatInt(id, 10), nil)
+	req, err := http.NewRequest(http.MethodDelete, c.BaseURL+"/fmsg/"+strconv.FormatInt(id, 10), nil)
 	if err != nil {
 		return err
 	}
@@ -312,7 +310,7 @@ func (c *Client) UploadAttachment(messageID, filePath string) error {
 		return fmt.Errorf("closing multipart writer: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/v1/messages/"+messageID+"/attachments", &buf)
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/fmsg/"+messageID+"/attach", &buf)
 	if err != nil {
 		return err
 	}
@@ -330,7 +328,7 @@ func (c *Client) UploadAttachment(messageID, filePath string) error {
 // DownloadAttachment downloads an attachment and writes it to outputPath.
 func (c *Client) DownloadAttachment(messageID, filename, outputPath string) error {
 	req, err := http.NewRequest(http.MethodGet,
-		c.BaseURL+"/api/v1/messages/"+messageID+"/attachments/"+filename, nil)
+		c.BaseURL+"/fmsg/"+messageID+"/attach/"+filename, nil)
 	if err != nil {
 		return err
 	}
@@ -360,7 +358,7 @@ func (c *Client) DownloadAttachment(messageID, filename, outputPath string) erro
 // DeleteAttachment removes an attachment from a message.
 func (c *Client) DeleteAttachment(messageID, filename string) error {
 	req, err := http.NewRequest(http.MethodDelete,
-		c.BaseURL+"/api/v1/messages/"+messageID+"/attachments/"+filename, nil)
+		c.BaseURL+"/fmsg/"+messageID+"/attach/"+filename, nil)
 	if err != nil {
 		return err
 	}
@@ -381,7 +379,7 @@ func (c *Client) UpdateMessage(id int64, body []byte) error {
 		bodyReader = bytes.NewReader(body)
 	}
 
-	req, err := http.NewRequest(http.MethodPut, c.BaseURL+"/api/v1/messages/"+strconv.FormatInt(id, 10), bodyReader)
+	req, err := http.NewRequest(http.MethodPut, c.BaseURL+"/fmsg/"+strconv.FormatInt(id, 10), bodyReader)
 	if err != nil {
 		return err
 	}
@@ -400,7 +398,7 @@ func (c *Client) UpdateMessage(id int64, body []byte) error {
 
 // DownloadData downloads the message body data and writes it to outputPath.
 func (c *Client) DownloadData(id, outputPath string) error {
-	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/api/v1/messages/"+id+"/data", nil)
+	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/fmsg/"+id+"/data", nil)
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,7 @@ go build -o fmsg
 
 ## Usage
 
-### Authentication
+### Authenticationfmsg
 
 Before using any other command, log in:
 
@@ -29,6 +29,7 @@ You will be prompted for your FMSG address (e.g. `@user@example.com`). A JWT tok
 | Variable      | Default                  | Description               |
 |---------------|--------------------------|---------------------------|
 | `FMSG_API_URL` | `http://localhost:4930` | Base URL of the fmsg-webapi |
+| `FMSG_JWT_SECRET` | `fmsg-dev-secret-do-not-use-in-production` | Secret used to sign JWT tokens (must match the server) |
 
 ### Commands
 
