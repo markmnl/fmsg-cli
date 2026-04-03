@@ -72,42 +72,42 @@ type Attachment struct {
 
 // MessageListItem represents a message in the list response.
 type MessageListItem struct {
-	ID         int64        `json:"id"`
-	Version    int          `json:"version"`
-	HasPID     bool         `json:"has_pid"`
-	HasAddTo   bool         `json:"has_add_to"`
-	CommonType bool         `json:"common_type"`
-	Important  bool         `json:"important"`
-	NoReply    bool         `json:"no_reply"`
-	Deflate    bool         `json:"deflate"`
-	PID        *int64       `json:"pid"`
-	From       string       `json:"from"`
-	To         []string     `json:"to"`
-	AddTo      []string     `json:"add_to"`
-	Time       *float64     `json:"time"`
-	Topic      string       `json:"topic"`
-	Type       string       `json:"type"`
-	Size       int          `json:"size"`
+	ID          int64        `json:"id"`
+	Version     int          `json:"version"`
+	HasPID      bool         `json:"has_pid"`
+	HasAddTo    bool         `json:"has_add_to"`
+	CommonType  bool         `json:"common_type"`
+	Important   bool         `json:"important"`
+	NoReply     bool         `json:"no_reply"`
+	Deflate     bool         `json:"deflate"`
+	PID         *int64       `json:"pid"`
+	From        string       `json:"from"`
+	To          []string     `json:"to"`
+	AddTo       []string     `json:"add_to"`
+	Time        *float64     `json:"time"`
+	Topic       string       `json:"topic"`
+	Type        string       `json:"type"`
+	Size        int          `json:"size"`
 	Attachments []Attachment `json:"attachments"`
 }
 
 // Message represents a fmsg message as exchanged over the HTTP API.
 type Message struct {
-	Version    int          `json:"version"`
-	HasPID     bool         `json:"has_pid"`
-	HasAddTo   bool         `json:"has_add_to"`
-	CommonType bool         `json:"common_type"`
-	Important  bool         `json:"important"`
-	NoReply    bool         `json:"no_reply"`
-	Deflate    bool         `json:"deflate"`
-	PID        *int64       `json:"pid"`
-	From       string       `json:"from"`
-	To         []string     `json:"to"`
-	AddTo      []string     `json:"add_to"`
-	Time       *float64     `json:"time"`
-	Topic      string       `json:"topic"`
-	Type       string       `json:"type"`
-	Size       int          `json:"size"`
+	Version     int          `json:"version"`
+	HasPID      bool         `json:"has_pid"`
+	HasAddTo    bool         `json:"has_add_to"`
+	CommonType  bool         `json:"common_type"`
+	Important   bool         `json:"important"`
+	NoReply     bool         `json:"no_reply"`
+	Deflate     bool         `json:"deflate"`
+	PID         *int64       `json:"pid"`
+	From        string       `json:"from"`
+	To          []string     `json:"to"`
+	AddTo       []string     `json:"add_to"`
+	Time        *float64     `json:"time"`
+	Topic       string       `json:"topic"`
+	Type        string       `json:"type"`
+	Size        int          `json:"size"`
 	Attachments []Attachment `json:"attachments"`
 }
 

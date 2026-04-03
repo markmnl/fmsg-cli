@@ -56,7 +56,7 @@ fmsg list
 fmsg list --limit 10 --offset 20
 
 # Get a specific message
-fmsg get 8f3c2c71
+fmsg get 101
 
 # Send a message
 fmsg send @recipient@example.com "Hello, world!"
@@ -77,17 +77,17 @@ fmsg update 42 --to @newrecipient@example.com "Updated body text"
 fmsg update 42 --important --add-to @extra@example.com
 
 # Delete a draft message
-fmsg del 8f3c2c71
+fmsg del 101
 
 # Upload attachment
-fmsg attach 8f3c2c71 ./report.pdf
+fmsg attach 101 ./report.pdf
 
 # Download attachment
-fmsg get-attach 8f3c2c71 report.pdf ./downloaded-report.pdf
+fmsg get-attach 101 report.pdf ./downloaded-report.pdf
 
 # Download message body data
-fmsg get-data 8f3c2c71 ./message-body.txt
+fmsg get-data 101 ./message-body.txt
 
 # Remove attachment
-fmsg rm-attach 8f3c2c71 report.pdf
+fmsg rm-attach 101 report.pdf
 ```
