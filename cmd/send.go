@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/markmnl/fmsg-cli/internal/api"
 	"github.com/markmnl/fmsg-cli/internal/auth"
@@ -12,7 +13,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var sendPID int64
+var (
+	sendPID       int64
+	sendTopic     string
+	sendAddTo     []string
+	sendImportant bool
+	sendNoReply   bool
+)
 
 var sendCmd = &cobra.Command{
 	Use:   "send <recipient> <file|text>",
@@ -55,14 +62,24 @@ var sendCmd = &cobra.Command{
 			"from":    creds.User,
 			"to":      []string{recipient},
 			"version": 1,
-			"flags":   0,
 			"type":    "text/plain",
 			"size":    len(data),
-			"topic":   "",
 			"data":    string(data),
 		}
 		if cmd.Flags().Changed("pid") {
 			msg["pid"] = sendPID
+		}
+		if cmd.Flags().Changed("topic") {
+			msg["topic"] = sendTopic
+		}
+		if len(sendAddTo) > 0 {
+			msg["add_to"] = sendAddTo
+		}
+		if sendImportant {
+			msg["important"] = true
+		}
+		if sendNoReply {
+			msg["no_reply"] = true
 		}
 		payload, err := json.Marshal(msg)
 		if err != nil {
@@ -76,17 +93,23 @@ var sendCmd = &cobra.Command{
 			return fmt.Errorf("creating draft: %w", err)
 		}
 
-		if err := client.SendMessage(draft.ID); err != nil {
+		sent, err := client.SendMessage(draft.ID)
+		if err != nil {
 			return fmt.Errorf("sending message: %w", err)
 		}
 
 		fmt.Println("Message sent successfully")
-		fmt.Printf("ID: %d\n", draft.ID)
+		fmt.Printf("ID: %d\n", sent.ID)
+		fmt.Printf("Time: %s\n", time.Unix(int64(sent.Time), 0).UTC().Format(time.RFC3339))
 		return nil
 	},
 }
 
 func init() {
 	sendCmd.Flags().Int64VarP(&sendPID, "pid", "p", 0, "parent message ID (optional)")
+	sendCmd.Flags().StringVar(&sendTopic, "topic", "", "thread topic (optional)")
+	sendCmd.Flags().StringSliceVar(&sendAddTo, "add-to", nil, "additional recipients (optional, requires --pid)")
+	sendCmd.Flags().BoolVar(&sendImportant, "important", false, "mark message as important")
+	sendCmd.Flags().BoolVar(&sendNoReply, "no-reply", false, "indicate replies will be discarded")
 	rootCmd.AddCommand(sendCmd)
 }

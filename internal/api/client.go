@@ -72,36 +72,54 @@ type Attachment struct {
 
 // MessageListItem represents a message in the list response.
 type MessageListItem struct {
-	ID          int64        `json:"id"`
-	Version     int          `json:"version"`
-	Flags       int          `json:"flags"`
-	PID         *int64       `json:"pid"`
-	From        string       `json:"from"`
-	To          []string     `json:"to"`
-	Time        *float64     `json:"time"`
-	Topic       string       `json:"topic"`
-	Type        string       `json:"type"`
-	Size        int          `json:"size"`
+	ID         int64        `json:"id"`
+	Version    int          `json:"version"`
+	HasPID     bool         `json:"has_pid"`
+	HasAddTo   bool         `json:"has_add_to"`
+	CommonType bool         `json:"common_type"`
+	Important  bool         `json:"important"`
+	NoReply    bool         `json:"no_reply"`
+	Deflate    bool         `json:"deflate"`
+	PID        *int64       `json:"pid"`
+	From       string       `json:"from"`
+	To         []string     `json:"to"`
+	AddTo      []string     `json:"add_to"`
+	Time       *float64     `json:"time"`
+	Topic      string       `json:"topic"`
+	Type       string       `json:"type"`
+	Size       int          `json:"size"`
 	Attachments []Attachment `json:"attachments"`
 }
 
 // Message represents a fmsg message as exchanged over the HTTP API.
 type Message struct {
-	Version     int          `json:"version"`
-	Flags       int          `json:"flags"`
-	PID         *int64       `json:"pid"`
-	From        string       `json:"from"`
-	To          []string     `json:"to"`
-	Time        *float64     `json:"time"`
-	Topic       string       `json:"topic"`
-	Type        string       `json:"type"`
-	Size        int          `json:"size"`
+	Version    int          `json:"version"`
+	HasPID     bool         `json:"has_pid"`
+	HasAddTo   bool         `json:"has_add_to"`
+	CommonType bool         `json:"common_type"`
+	Important  bool         `json:"important"`
+	NoReply    bool         `json:"no_reply"`
+	Deflate    bool         `json:"deflate"`
+	PID        *int64       `json:"pid"`
+	From       string       `json:"from"`
+	To         []string     `json:"to"`
+	AddTo      []string     `json:"add_to"`
+	Time       *float64     `json:"time"`
+	Topic      string       `json:"topic"`
+	Type       string       `json:"type"`
+	Size       int          `json:"size"`
 	Attachments []Attachment `json:"attachments"`
 }
 
 // CreateMessageResponse is the response from creating a message.
 type CreateMessageResponse struct {
 	ID int64 `json:"id"`
+}
+
+// SendMessageResponse is the response from sending a message.
+type SendMessageResponse struct {
+	ID   int64   `json:"id"`
+	Time float64 `json:"time"`
 }
 
 // ListMessages returns messages for the authenticated user.
@@ -198,19 +216,27 @@ func (c *Client) CreateMessage(body []byte) (*CreateMessageResponse, error) {
 }
 
 // SendMessage sends a draft message by ID.
-func (c *Client) SendMessage(id int64) error {
+func (c *Client) SendMessage(id int64) (*SendMessageResponse, error) {
 	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/v1/messages/"+strconv.FormatInt(id, 10)+"/send", nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	resp, err := c.do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	return checkStatus(resp)
+	if err := checkStatus(resp); err != nil {
+		return nil, err
+	}
+
+	var result SendMessageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return &result, nil
 }
 
 // DeleteMessage deletes a message by ID.
@@ -310,4 +336,57 @@ func (c *Client) DeleteAttachment(messageID, filename string) error {
 	defer resp.Body.Close()
 
 	return checkStatus(resp)
+}
+
+// UpdateMessage updates a draft message by ID.
+func (c *Client) UpdateMessage(id int64, body []byte) error {
+	var bodyReader io.Reader
+	if len(body) > 0 {
+		bodyReader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequest(http.MethodPut, c.BaseURL+"/api/v1/messages/"+strconv.FormatInt(id, 10), bodyReader)
+	if err != nil {
+		return err
+	}
+	if len(body) > 0 {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return checkStatus(resp)
+}
+
+// DownloadData downloads the message body data and writes it to outputPath.
+func (c *Client) DownloadData(id, outputPath string) error {
+	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/api/v1/messages/"+id+"/data", nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if err := checkStatus(resp); err != nil {
+		return err
+	}
+
+	out, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("creating output file: %w", err)
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		return fmt.Errorf("writing output file: %w", err)
+	}
+	return nil
 }
