@@ -122,6 +122,12 @@ type SendMessageResponse struct {
 	Time float64 `json:"time"`
 }
 
+// AddRecipientsResponse is the response from adding recipients to a message.
+type AddRecipientsResponse struct {
+	ID    int64 `json:"id"`
+	Added int   `json:"added"`
+}
+
 // ListMessages returns messages for the authenticated user.
 func (c *Client) ListMessages(limit, offset int) ([]MessageListItem, error) {
 	u, err := url.Parse(c.BaseURL + "/api/v1/messages")
@@ -233,6 +239,36 @@ func (c *Client) SendMessage(id int64) (*SendMessageResponse, error) {
 	}
 
 	var result SendMessageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return &result, nil
+}
+
+// AddRecipients adds additional recipients to an existing message.
+func (c *Client) AddRecipients(id int64, addTo []string) (*AddRecipientsResponse, error) {
+	body, err := json.Marshal(map[string]interface{}{"add_to": addTo})
+	if err != nil {
+		return nil, fmt.Errorf("encoding request: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/v1/messages/"+strconv.FormatInt(id, 10)+"/add-to", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := checkStatus(resp); err != nil {
+		return nil, err
+	}
+
+	var result AddRecipientsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}

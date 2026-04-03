@@ -16,7 +16,6 @@ import (
 var (
 	sendPID       int64
 	sendTopic     string
-	sendAddTo     []string
 	sendImportant bool
 	sendNoReply   bool
 )
@@ -72,9 +71,6 @@ var sendCmd = &cobra.Command{
 		if cmd.Flags().Changed("topic") {
 			msg["topic"] = sendTopic
 		}
-		if len(sendAddTo) > 0 {
-			msg["add_to"] = sendAddTo
-		}
 		if sendImportant {
 			msg["important"] = true
 		}
@@ -108,7 +104,6 @@ var sendCmd = &cobra.Command{
 func init() {
 	sendCmd.Flags().Int64VarP(&sendPID, "pid", "p", 0, "parent message ID (optional)")
 	sendCmd.Flags().StringVar(&sendTopic, "topic", "", "thread topic (optional)")
-	sendCmd.Flags().StringSliceVar(&sendAddTo, "add-to", nil, "additional recipients (optional, requires --pid)")
 	sendCmd.Flags().BoolVar(&sendImportant, "important", false, "mark message as important")
 	sendCmd.Flags().BoolVar(&sendNoReply, "no-reply", false, "indicate replies will be discarded")
 	rootCmd.AddCommand(sendCmd)
