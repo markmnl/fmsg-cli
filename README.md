@@ -61,6 +61,9 @@ fmsg send @recipient@example.com "Hello, world!"
 fmsg send @recipient@example.com ./message.txt
 echo "Hello via stdin" | fmsg send @recipient@example.com -
 
+# Reply to an existing message
+fmsg send --pid 12345 recipient "hey there!"
+
 # Delete a message
 fmsg del 8f3c2c71
 
