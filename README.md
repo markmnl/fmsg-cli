@@ -37,6 +37,7 @@ You will be prompted for your FMSG address (e.g. `@user@example.com`). A JWT tok
 |---------|-------------|
 | `fmsg login` | Authenticate and store a local token |
 | `fmsg list [--limit N] [--offset N]` | List messages for the authenticated user |
+| `fmsg wait [--since-id N] [--timeout N]` | Long-poll for new messages |
 | `fmsg get <message-id>` | Retrieve a message by ID |
 | `fmsg send <recipient> <file\|text\|->` | Send a message (file path, text, or `-` for stdin) |
 | `fmsg update <message-id> [file\|text\|->` | Update a draft message |
@@ -56,6 +57,10 @@ fmsg login
 # List messages
 fmsg list
 fmsg list --limit 10 --offset 20
+
+# Wait for a new message
+fmsg wait
+fmsg wait --since-id 120 --timeout 10
 
 # Get a specific message
 fmsg get 101
