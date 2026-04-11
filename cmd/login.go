@@ -11,21 +11,30 @@ import (
 )
 
 var loginCmd = &cobra.Command{
-	Use:   "login",
+	Use:   "login [address]",
 	Short: "Authenticate and store a local token",
 	Long: `Prompt for your FMSG address, generate a JWT token, and store it locally.
 
 The token is stored in $XDG_CONFIG_HOME/fmsg/auth.json (or ~/.config/fmsg/auth.json)
-and is valid for 24 hours.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Print("FMSG address (e.g. @user@example.com): ")
+and is valid for 24 hours.
 
-		reader := bufio.NewReader(os.Stdin)
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("reading input: %w", err)
+Optionally supply the address as an argument to skip the prompt.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var user string
+
+		if len(args) > 0 {
+			user = args[0]
+		} else {
+			fmt.Print("FMSG address (e.g. @user@example.com): ")
+
+			reader := bufio.NewReader(os.Stdin)
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				return fmt.Errorf("reading input: %w", err)
+			}
+			user = strings.TrimSpace(input)
 		}
-		user := strings.TrimSpace(input)
+
 		if user == "" {
 			return fmt.Errorf("FMSG address must not be empty")
 		}
