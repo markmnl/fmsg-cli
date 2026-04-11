@@ -35,6 +35,9 @@ var getCmd = &cobra.Command{
 			addTo, _ := json.Marshal(msg.AddTo)
 			fmt.Printf("Add-To: %s\n", string(addTo))
 		}
+		if msg.AddToFrom != nil {
+			fmt.Printf("Add-To-From: %s\n", *msg.AddToFrom)
+		}
 		if msg.PID != nil {
 			fmt.Printf("PID:  %d\n", *msg.PID)
 		}

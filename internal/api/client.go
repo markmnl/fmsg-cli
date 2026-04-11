@@ -83,6 +83,7 @@ type MessageListItem struct {
 	From        string       `json:"from"`
 	To          []string     `json:"to"`
 	AddTo       []string     `json:"add_to"`
+	AddToFrom   *string      `json:"add_to_from"`
 	Time        *float64     `json:"time"`
 	Topic       string       `json:"topic"`
 	Type        string       `json:"type"`
@@ -102,6 +103,7 @@ type Message struct {
 	From        string       `json:"from"`
 	To          []string     `json:"to"`
 	AddTo       []string     `json:"add_to"`
+	AddToFrom   *string      `json:"add_to_from"`
 	Time        *float64     `json:"time"`
 	Topic       string       `json:"topic"`
 	Type        string       `json:"type"`
@@ -124,6 +126,12 @@ type SendMessageResponse struct {
 type AddRecipientsResponse struct {
 	ID    int64 `json:"id"`
 	Added int   `json:"added"`
+}
+
+// WaitResponse is the response from GET /fmsg/wait.
+type WaitResponse struct {
+	HasNew   bool  `json:"has_new"`
+	LatestID int64 `json:"latest_id"`
 }
 
 // ListMessages returns messages for the authenticated user.
@@ -161,6 +169,45 @@ func (c *Client) ListMessages(limit, offset int) ([]MessageListItem, error) {
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}
 	return messages, nil
+}
+
+// WaitForMessage long-polls for a new message for the authenticated user.
+func (c *Client) WaitForMessage(sinceID int64, timeout int) (*WaitResponse, error) {
+	u, err := url.Parse(c.BaseURL + "/fmsg/wait")
+	if err != nil {
+		return nil, err
+	}
+
+	q := u.Query()
+	q.Set("since_id", strconv.FormatInt(sinceID, 10))
+	q.Set("timeout", strconv.Itoa(timeout))
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := checkStatus(resp); err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode == http.StatusNoContent {
+		return &WaitResponse{HasNew: false}, nil
+	}
+
+	var result WaitResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+
+	return &result, nil
 }
 
 // GetMessage retrieves a single message by ID.
