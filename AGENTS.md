@@ -23,3 +23,8 @@ This is `fmsg-cli`, a Go CLI client for the fmsg HTTP API. It is built with [Cob
 - API base URL is read from config (`internal/config`)
 - Follow existing patterns in `cmd/` when adding new commands
 - Go module path: see `go.mod`
+
+## Documentation Maintenance
+
+- Keep `README.md` concise and up to date.
+- When CLI arguments, flags, or command behavior change, update `README.md` usage, command table, and relevant examples in the same change.

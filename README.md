@@ -14,15 +14,21 @@ go build -o fmsg
 
 ## Usage
 
-### Authenticationfmsg
+### Authentication
 
 Before using any other command, log in:
 
 ```sh
-fmsg login
+fmsg login [address]
 ```
 
-You will be prompted for your FMSG address (e.g. `@user@example.com`). A JWT token is generated locally and stored in `$XDG_CONFIG_HOME/fmsg/auth.json` (typically `~/.config/fmsg/auth.json`) with `0600` permissions. The token is valid for 24 hours.
+You can optionally provide the FMSG address directly (e.g. `@user@example.com`) to skip the prompt:
+
+```sh
+fmsg login @user@example.com
+```
+
+If no address argument is provided, you will be prompted interactively. A JWT token is generated locally and stored in `$XDG_CONFIG_HOME/fmsg/auth.json` (typically `~/.config/fmsg/auth.json`) with `0600` permissions. The token is valid for 24 hours.
 
 ### Configuration
 
@@ -35,7 +41,7 @@ You will be prompted for your FMSG address (e.g. `@user@example.com`). A JWT tok
 
 | Command | Description |
 |---------|-------------|
-| `fmsg login` | Authenticate and store a local token |
+| `fmsg login [address]` | Authenticate and store a local token (optional address argument) |
 | `fmsg list [--limit N] [--offset N]` | List messages for the authenticated user |
 | `fmsg wait [--since-id N] [--timeout N]` | Long-poll for new messages |
 | `fmsg get <message-id>` | Retrieve a message by ID |
@@ -53,6 +59,7 @@ You will be prompted for your FMSG address (e.g. `@user@example.com`). A JWT tok
 ```sh
 # Login
 fmsg login
+fmsg login @user@example.com
 
 # List messages
 fmsg list
