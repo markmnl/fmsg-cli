@@ -11,14 +11,29 @@ import (
 )
 
 // jwtSecret returns the signing secret from the FMSG_JWT_SECRET environment variable.
-// If the value is valid base64, it is decoded to raw bytes; otherwise the string
-// value is used directly. Returns an error if the variable is not set or empty.
+// Values prefixed with "base64:" are decoded as padded base64. Unprefixed values are
+// only decoded when they round-trip as canonical padded or unpadded base64;
+// otherwise the string value is used directly. Returns an error if the variable is
+// not set or empty.
 func jwtSecret() ([]byte, error) {
 	s := os.Getenv("FMSG_JWT_SECRET")
 	if s == "" {
 		return nil, fmt.Errorf("FMSG_JWT_SECRET environment variable is required but not set")
 	}
-	if b, err := base64.StdEncoding.DecodeString(s); err == nil {
+
+	const base64Prefix = "base64:"
+	if len(s) >= len(base64Prefix) && s[:len(base64Prefix)] == base64Prefix {
+		b, err := base64.StdEncoding.DecodeString(s[len(base64Prefix):])
+		if err != nil {
+			return nil, fmt.Errorf("invalid base64 JWT secret: %w", err)
+		}
+		return b, nil
+	}
+
+	if b, err := base64.StdEncoding.DecodeString(s); err == nil && base64.StdEncoding.EncodeToString(b) == s {
+		return b, nil
+	}
+	if b, err := base64.RawStdEncoding.DecodeString(s); err == nil && base64.RawStdEncoding.EncodeToString(b) == s {
 		return b, nil
 	}
 	return []byte(s), nil
