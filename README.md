@@ -35,7 +35,11 @@ If no address argument is provided, you will be prompted interactively. A JWT to
 | Variable      | Default                  | Description               |
 |---------------|--------------------------|---------------------------|
 | `FMSG_API_URL` | `http://localhost:4930` | Base URL of the fmsg-webapi |
-| `FMSG_JWT_SECRET` | `fmsg-dev-secret-do-not-use-in-production` | Secret used to sign JWT tokens (must match the server) |
+| `FMSG_JWT_SECRET` | *(required)* | Secret used to sign JWT tokens (must match the server) |
+
+`FMSG_JWT_SECRET` formats:
+- Plain string (used as-is): `FMSG_JWT_SECRET=super-secret`
+- Base64 with `base64:` prefix (decoded to raw bytes): `FMSG_JWT_SECRET=base64:c3VwZXItc2VjcmV0`
 
 ### Commands
 
