@@ -39,8 +39,7 @@ If no address argument is provided, you will be prompted interactively. A JWT to
 
 `FMSG_JWT_SECRET` formats:
 - Plain string (used as-is): `FMSG_JWT_SECRET=super-secret`
-- Explicit base64 (decode raw bytes): `FMSG_JWT_SECRET=base64:c3VwZXItc2VjcmV0`
-- Unprefixed canonical base64 is also decoded; otherwise the value is treated as a plain string.
+- Base64 with `base64:` prefix (decoded to raw bytes): `FMSG_JWT_SECRET=base64:c3VwZXItc2VjcmV0`
 
 ### Commands
 

@@ -11,10 +11,8 @@ import (
 )
 
 // jwtSecret returns the signing secret from the FMSG_JWT_SECRET environment variable.
-// Values prefixed with "base64:" are decoded as padded base64. Unprefixed values are
-// only decoded when they round-trip as canonical padded or unpadded base64;
-// otherwise the string value is used directly. Returns an error if the variable is
-// not set or empty.
+// If the value starts with "base64:" the remainder is decoded as base64; otherwise
+// the string value is used directly. Returns an error if the variable is not set or empty.
 func jwtSecret() ([]byte, error) {
 	s := os.Getenv("FMSG_JWT_SECRET")
 	if s == "" {
@@ -30,12 +28,6 @@ func jwtSecret() ([]byte, error) {
 		return b, nil
 	}
 
-	if b, err := base64.StdEncoding.DecodeString(s); err == nil && base64.StdEncoding.EncodeToString(b) == s {
-		return b, nil
-	}
-	if b, err := base64.RawStdEncoding.DecodeString(s); err == nil && base64.RawStdEncoding.EncodeToString(b) == s {
-		return b, nil
-	}
 	return []byte(s), nil
 }
 
