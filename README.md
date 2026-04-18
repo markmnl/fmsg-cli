@@ -32,6 +32,8 @@ If no address argument is provided, you will be prompted interactively. A JWT to
 
 ### Configuration
 
+If a `.env` file exists in the working directory it is loaded automatically on startup (see `.env.example`). Environment variables set in the shell take precedence over values in `.env`.
+
 | Variable      | Default                  | Description               |
 |---------------|--------------------------|---------------------------|
 | `FMSG_API_URL` | `http://127.0.0.1:8000` | Base URL of the fmsg-webapi |
