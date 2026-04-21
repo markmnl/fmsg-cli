@@ -52,12 +52,14 @@ If a `.env` file exists in the working directory it is loaded automatically on s
 | `fmsg wait [--since-id N] [--timeout N]` | Long-poll for new messages |
 | `fmsg get <message-id>` | Retrieve a message by ID |
 | `fmsg send <recipient> <file\|text\|->` | Send a message (file path, text, or `-` for stdin) |
+| `fmsg draft create <recipient> <file\|text\|->` | Create a draft message without sending |
+| `fmsg draft send <message-id>` | Send a previously created draft |
 | `fmsg update <message-id> [file\|text\|->` | Update a draft message |
 | `fmsg del <message-id>` | Delete a draft message by ID |
 | `fmsg add-to <message-id> <recipient> [recipient...]` | Add additional recipients to a message |
 | `fmsg attach <message-id> <file>` | Upload a file attachment to a message |
 | `fmsg get-attach <message-id> <filename> <output-file>` | Download an attachment |
-| `fmsg get-data <message-id> <output-file>` | Download the message body data |
+| `fmsg get-data <message-id> [output-file]` | Download message body data (stdout if no output file) |
 | `fmsg rm-attach <message-id> <filename>` | Remove an attachment from a message |
 
 ### Examples
@@ -90,6 +92,12 @@ fmsg send --pid 12345 @recipient@example.com "hey there!"
 fmsg send --topic "Project update" --important @recipient@example.com ./update.txt
 fmsg send --no-reply @recipient@example.com "Do not reply to this"
 
+# Create/send a draft in two steps
+fmsg draft create @recipient@example.com "Draft body"
+fmsg update 42 --topic "Final topic"
+fmsg attach 42 ./report.pdf
+fmsg draft send 42
+
 # Add additional recipients to a message
 fmsg add-to 101 @other@example.com
 fmsg add-to 101 @cc1@example.com @cc2@example.com
@@ -109,6 +117,7 @@ fmsg attach 101 ./report.pdf
 fmsg get-attach 101 report.pdf ./downloaded-report.pdf
 
 # Download message body data
+fmsg get-data 101
 fmsg get-data 101 ./message-body.txt
 
 # Remove attachment

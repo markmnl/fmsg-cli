@@ -3,10 +3,13 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 
 	"github.com/markmnl/fmsg-cli/internal/auth"
+	"github.com/markmnl/fmsg-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +28,19 @@ Optionally supply the address as an argument to skip the prompt.`,
 		if len(args) > 0 {
 			user = args[0]
 		} else {
-			fmt.Print("FMSG address (e.g. @user@example.com): ")
+			exampleDomain := "example.com"
+			if parsed, err := url.Parse(config.GetAPIURL()); err == nil {
+				hostname := parsed.Hostname()
+				if hostname != "" {
+					exampleDomain = hostname
+					parts := strings.Split(hostname, ".")
+					if len(parts) > 2 && net.ParseIP(hostname) == nil {
+						exampleDomain = strings.Join(parts[1:], ".")
+					}
+				}
+			}
+
+			fmt.Printf("FMSG address (e.g. @user@%s): ", exampleDomain)
 
 			reader := bufio.NewReader(os.Stdin)
 			input, err := reader.ReadString('\n')
@@ -54,6 +69,7 @@ Optionally supply the address as an argument to skip the prompt.`,
 		}
 
 		fmt.Printf("Logged in as %s (token expires %s)\n", user, exp.Format("2006-01-02T15:04:05Z"))
+		fmt.Printf("API URL: %s\n", config.GetAPIURL())
 		return nil
 	},
 }

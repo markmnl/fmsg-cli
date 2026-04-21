@@ -443,8 +443,8 @@ func (c *Client) UpdateMessage(id int64, body []byte) error {
 	return checkStatus(resp)
 }
 
-// DownloadData downloads the message body data and writes it to outputPath.
-func (c *Client) DownloadData(id, outputPath string) error {
+// DownloadDataToWriter downloads the message body data and writes it to w.
+func (c *Client) DownloadDataToWriter(id string, w io.Writer) error {
 	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/fmsg/"+id+"/data", nil)
 	if err != nil {
 		return err
@@ -460,14 +460,22 @@ func (c *Client) DownloadData(id, outputPath string) error {
 		return err
 	}
 
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		return fmt.Errorf("writing output: %w", err)
+	}
+	return nil
+}
+
+// DownloadData downloads the message body data and writes it to outputPath.
+func (c *Client) DownloadData(id, outputPath string) error {
 	out, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("creating output file: %w", err)
 	}
 	defer out.Close()
 
-	if _, err := io.Copy(out, resp.Body); err != nil {
-		return fmt.Errorf("writing output file: %w", err)
+	if err := c.DownloadDataToWriter(id, out); err != nil {
+		return err
 	}
 	return nil
 }
