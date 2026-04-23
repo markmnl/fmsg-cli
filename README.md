@@ -50,7 +50,7 @@ If a `.env` file exists in the working directory it is loaded automatically on s
 | Command | Description |
 |---------|-------------|
 | `fmsg login [address]` | Authenticate and store a local token (optional address argument) |
-| `fmsg list [--limit N] [--offset N]` | List messages for the authenticated user |
+| `fmsg list` \| `fmsg ls [--limit N] [--offset N]` | List messages for the authenticated user |
 | `fmsg sent [--limit N] [--offset N]` | List messages authored by the authenticated user |
 | `fmsg wait [--since-id N] [--timeout N]` | Long-poll for new messages |
 | `fmsg get <message-id>` | Retrieve a message by ID |
