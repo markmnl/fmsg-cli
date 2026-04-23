@@ -171,6 +171,43 @@ func (c *Client) ListMessages(limit, offset int) ([]MessageListItem, error) {
 	return messages, nil
 }
 
+// ListSentMessages returns messages authored by the authenticated user.
+func (c *Client) ListSentMessages(limit, offset int) ([]MessageListItem, error) {
+	u, err := url.Parse(c.BaseURL + "/fmsg/sent")
+	if err != nil {
+		return nil, err
+	}
+	q := u.Query()
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	if offset > 0 {
+		q.Set("offset", strconv.Itoa(offset))
+	}
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := checkStatus(resp); err != nil {
+		return nil, err
+	}
+
+	var messages []MessageListItem
+	if err := json.NewDecoder(resp.Body).Decode(&messages); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return messages, nil
+}
+
 // WaitForMessage long-polls for a new message for the authenticated user.
 func (c *Client) WaitForMessage(sinceID int64, timeout int) (*WaitResponse, error) {
 	u, err := url.Parse(c.BaseURL + "/fmsg/wait")

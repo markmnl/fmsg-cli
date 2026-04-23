@@ -24,10 +24,6 @@ and is valid for 24 hours.
 Optionally supply the address as an argument to skip the prompt.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var user string
-
-		if len(args) > 0 {
-			user = args[0]
-		} else {
 			exampleDomain := "example.com"
 			if parsed, err := url.Parse(config.GetAPIURL()); err == nil {
 				hostname := parsed.Hostname()
@@ -40,7 +36,10 @@ Optionally supply the address as an argument to skip the prompt.`,
 				}
 			}
 
-			fmt.Printf("FMSG address (e.g. @user@%s): ", exampleDomain)
+		if len(args) > 0 {
+				user = strings.TrimSpace(args[0])
+		} else {
+				fmt.Printf("FMSG address (e.g. @\x1b[1;36muser\x1b[0m@%s): ", exampleDomain)
 
 			reader := bufio.NewReader(os.Stdin)
 			input, err := reader.ReadString('\n')
@@ -53,6 +52,9 @@ Optionally supply the address as an argument to skip the prompt.`,
 		if user == "" {
 			return fmt.Errorf("FMSG address must not be empty")
 		}
+			if !strings.Contains(user, "@") {
+				user = fmt.Sprintf("@%s@%s", user, exampleDomain)
+			}
 
 		token, exp, err := auth.Generate(user)
 		if err != nil {

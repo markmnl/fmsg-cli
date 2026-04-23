@@ -28,6 +28,8 @@ You can optionally provide the FMSG address directly (e.g. `@user@example.com`) 
 fmsg login @user@example.com
 ```
 
+If the provided value contains no `@` symbols (argument or prompted input), it is treated as just the user part and expanded to `@<user>@<domain>` using the configured `FMSG_API_URL` domain.
+
 If no address argument is provided, you will be prompted interactively. A JWT token is generated locally and stored in `$XDG_CONFIG_HOME/fmsg/auth.json` (typically `~/.config/fmsg/auth.json`) with `0600` permissions. The token is valid for 24 hours.
 
 ### Configuration
@@ -49,6 +51,7 @@ If a `.env` file exists in the working directory it is loaded automatically on s
 |---------|-------------|
 | `fmsg login [address]` | Authenticate and store a local token (optional address argument) |
 | `fmsg list [--limit N] [--offset N]` | List messages for the authenticated user |
+| `fmsg sent [--limit N] [--offset N]` | List messages authored by the authenticated user |
 | `fmsg wait [--since-id N] [--timeout N]` | Long-poll for new messages |
 | `fmsg get <message-id>` | Retrieve a message by ID |
 | `fmsg send <recipient> <file\|text\|->` | Send a message (file path, text, or `-` for stdin) |
@@ -72,6 +75,10 @@ fmsg login @user@example.com
 # List messages
 fmsg list
 fmsg list --limit 10 --offset 20
+
+# List authored messages (sent + drafts)
+fmsg sent
+fmsg sent --limit 10 --offset 20
 
 # Wait for a new message
 fmsg wait
