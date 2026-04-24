@@ -34,7 +34,7 @@ func jwtSecret() ([]byte, error) {
 // TokenDuration is how long a generated token remains valid.
 const TokenDuration = 24 * time.Hour
 
-// Generate creates a signed JWT for the given FMSG address.
+// Generate creates a signed JWT for the given fmsg address.
 // Returns the signed token string and its expiration time.
 func Generate(user string) (string, time.Time, error) {
 	now := time.Now()

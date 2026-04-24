@@ -22,7 +22,7 @@ Before using any other command, log in:
 fmsg login [address]
 ```
 
-You can optionally provide the FMSG address directly (e.g. `@user@example.com`) to skip the prompt:
+You can optionally provide the fmsg address directly (e.g. `@user@example.com`) to skip the prompt:
 
 ```sh
 fmsg login @user@example.com

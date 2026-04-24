@@ -16,7 +16,7 @@ import (
 var loginCmd = &cobra.Command{
 	Use:   "login [address]",
 	Short: "Authenticate and store a local token",
-	Long: `Prompt for your FMSG address, generate a JWT token, and store it locally.
+	Long: `Prompt for your fmsg address, generate a JWT token, and store it locally.
 
 The token is stored in $XDG_CONFIG_HOME/fmsg/auth.json (or ~/.config/fmsg/auth.json)
 and is valid for 24 hours.
@@ -24,22 +24,22 @@ and is valid for 24 hours.
 Optionally supply the address as an argument to skip the prompt.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var user string
-			exampleDomain := "example.com"
-			if parsed, err := url.Parse(config.GetAPIURL()); err == nil {
-				hostname := parsed.Hostname()
-				if hostname != "" {
-					exampleDomain = hostname
-					parts := strings.Split(hostname, ".")
-					if len(parts) > 2 && net.ParseIP(hostname) == nil {
-						exampleDomain = strings.Join(parts[1:], ".")
-					}
+		exampleDomain := "example.com"
+		if parsed, err := url.Parse(config.GetAPIURL()); err == nil {
+			hostname := parsed.Hostname()
+			if hostname != "" {
+				exampleDomain = hostname
+				parts := strings.Split(hostname, ".")
+				if len(parts) > 2 && net.ParseIP(hostname) == nil {
+					exampleDomain = strings.Join(parts[1:], ".")
 				}
 			}
+		}
 
 		if len(args) > 0 {
-				user = strings.TrimSpace(args[0])
+			user = strings.TrimSpace(args[0])
 		} else {
-				fmt.Printf("FMSG address (e.g. @\x1b[1;36muser\x1b[0m@%s): ", exampleDomain)
+			fmt.Printf("fmsg address or just user (e.g. @\x1b[1;36muser\x1b[0m@%s): ", exampleDomain)
 
 			reader := bufio.NewReader(os.Stdin)
 			input, err := reader.ReadString('\n')
@@ -50,11 +50,11 @@ Optionally supply the address as an argument to skip the prompt.`,
 		}
 
 		if user == "" {
-			return fmt.Errorf("FMSG address must not be empty")
+			return fmt.Errorf("fmsg address must not be empty")
 		}
-			if !strings.Contains(user, "@") {
-				user = fmt.Sprintf("@%s@%s", user, exampleDomain)
-			}
+		if !strings.Contains(user, "@") {
+			user = fmt.Sprintf("@%s@%s", user, exampleDomain)
+		}
 
 		token, exp, err := auth.Generate(user)
 		if err != nil {
