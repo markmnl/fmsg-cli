@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/markmnl/fmsg-cli/internal/api"
 	"github.com/markmnl/fmsg-cli/internal/auth"
@@ -21,11 +22,14 @@ var getAttachCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		messageID := args[0]
+		client := api.New(config.GetAPIURL(), creds.Token)
+		resolvedID, err := resolveMessageID(client, args[0])
+		if err != nil {
+			return err
+		}
+		messageID := strconv.FormatInt(resolvedID, 10)
 		filename := args[1]
 		outputPath := args[2]
-
-		client := api.New(config.GetAPIURL(), creds.Token)
 		if err := client.DownloadAttachment(messageID, filename, outputPath); err != nil {
 			return err
 		}

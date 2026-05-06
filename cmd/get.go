@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/markmnl/fmsg-cli/internal/api"
 	"github.com/markmnl/fmsg-cli/internal/auth"
@@ -23,7 +24,11 @@ var getCmd = &cobra.Command{
 		}
 
 		client := api.New(config.GetAPIURL(), creds.Token)
-		msg, err := client.GetMessage(args[0])
+		msgID, err := resolveMessageID(client, args[0])
+		if err != nil {
+			return err
+		}
+		msg, err := client.GetMessage(strconv.FormatInt(msgID, 10))
 		if err != nil {
 			return err
 		}

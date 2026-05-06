@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strconv"
 
 	"github.com/markmnl/fmsg-cli/internal/api"
 	"github.com/markmnl/fmsg-cli/internal/auth"
@@ -22,14 +21,14 @@ var addToCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		msgID, err := strconv.ParseInt(args[0], 10, 64)
+		client := api.New(config.GetAPIURL(), creds.Token)
+		msgID, err := resolveMessageID(client, args[0])
 		if err != nil {
-			return fmt.Errorf("invalid message ID: %w", err)
+			return err
 		}
 
 		recipients := args[1:]
 
-		client := api.New(config.GetAPIURL(), creds.Token)
 		result, err := client.AddRecipients(msgID, recipients)
 		if err != nil {
 			return err
