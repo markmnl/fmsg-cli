@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/markmnl/fmsg-cli/internal/api"
 	"github.com/markmnl/fmsg-cli/internal/auth"
@@ -24,9 +25,14 @@ var getDataCmd = &cobra.Command{
 		messageID := args[0]
 
 		client := api.New(config.GetAPIURL(), creds.Token)
+		resolvedID, err := resolveMessageID(client, messageID)
+		if err != nil {
+			return err
+		}
+		messageIDStr := strconv.FormatInt(resolvedID, 10)
 		if len(args) == 2 {
 			outputPath := args[1]
-			if err := client.DownloadData(messageID, outputPath); err != nil {
+			if err := client.DownloadData(messageIDStr, outputPath); err != nil {
 				return err
 			}
 
@@ -34,7 +40,7 @@ var getDataCmd = &cobra.Command{
 			return nil
 		}
 
-		if err := client.DownloadDataToWriter(messageID, os.Stdout); err != nil {
+		if err := client.DownloadDataToWriter(messageIDStr, os.Stdout); err != nil {
 			return err
 		}
 		return nil

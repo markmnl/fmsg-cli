@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/markmnl/fmsg-cli/internal/api"
@@ -108,12 +107,12 @@ var draftSendCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		msgID, err := strconv.ParseInt(args[0], 10, 64)
+		client := api.New(config.GetAPIURL(), creds.Token)
+		msgID, err := resolveMessageID(client, args[0])
 		if err != nil {
 			return fmt.Errorf("invalid message ID: %w", err)
 		}
 
-		client := api.New(config.GetAPIURL(), creds.Token)
 		sent, err := client.SendMessage(msgID)
 		if err != nil {
 			return fmt.Errorf("sending draft: %w", err)

@@ -65,6 +65,16 @@ If a `.env` file exists in the working directory it is loaded automatically on s
 | `fmsg get-data <message-id> [output-file]` | Download message body data (stdout if no output file) |
 | `fmsg rm-attach <message-id> <filename>` | Remove an attachment from a message |
 
+Wherever a `<message-id>` is accepted you may supply a **negative index** to refer to a
+recent message without knowing its ID.  The index is resolved against your inbox
+(`GET /fmsg`), which is ordered by ID descending:
+
+| Value | Meaning |
+|-------|---------|
+| `-1`  | Most recent message |
+| `-2`  | Second most recent  |
+| `-N`  | N-th most recent    |
+
 ### Examples
 
 ```sh
@@ -86,6 +96,12 @@ fmsg wait --since-id 120 --timeout 10
 
 # Get a specific message
 fmsg get 101
+
+# Get the most recent message (negative index)
+fmsg get -1
+
+# Get the second most recent message
+fmsg get -2
 
 # Send a message
 fmsg send @recipient@example.com "Hello, world!"

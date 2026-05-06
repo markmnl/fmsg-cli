@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 
 	"github.com/markmnl/fmsg-cli/internal/api"
 	"github.com/markmnl/fmsg-cli/internal/auth"
@@ -39,9 +38,10 @@ Only provided fields are updated; recipients in to are fully replaced.`,
 			os.Exit(1)
 		}
 
-		msgID, err := strconv.ParseInt(args[0], 10, 64)
+		client := api.New(config.GetAPIURL(), creds.Token)
+		msgID, err := resolveMessageID(client, args[0])
 		if err != nil {
-			return fmt.Errorf("invalid message ID: %w", err)
+			return err
 		}
 
 		msg := map[string]interface{}{
@@ -96,7 +96,6 @@ Only provided fields are updated; recipients in to are fully replaced.`,
 			return fmt.Errorf("encoding message: %w", err)
 		}
 
-		client := api.New(config.GetAPIURL(), creds.Token)
 		if err := client.UpdateMessage(msgID, payload); err != nil {
 			return err
 		}
