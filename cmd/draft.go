@@ -110,7 +110,7 @@ var draftSendCmd = &cobra.Command{
 		client := api.New(config.GetAPIURL(), creds.Token)
 		msgID, err := resolveMessageID(client, args[0])
 		if err != nil {
-			return fmt.Errorf("invalid message ID: %w", err)
+			return err
 		}
 
 		sent, err := client.SendMessage(msgID)
