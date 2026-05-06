@@ -61,6 +61,10 @@ var getCmd = &cobra.Command{
 				fmt.Printf("  %s (%d bytes)\n", a.Filename, a.Size)
 			}
 		}
+		if msg.ShortText != nil && *msg.ShortText != "" {
+			fmt.Println()
+			fmt.Println(*msg.ShortText)
+		}
 		return nil
 	},
 }
