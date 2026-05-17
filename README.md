@@ -52,7 +52,6 @@ If a `.env` file exists in the working directory it is loaded automatically on s
 | `fmsg login [address]` | Authenticate and store a local token (optional address argument) |
 | `fmsg list` \| `fmsg ls [--limit N] [--offset N]` | List messages for the authenticated user |
 | `fmsg sent [--limit N] [--offset N]` | List messages authored by the authenticated user |
-| `fmsg wait [--since-id N] [--timeout N]` | Long-poll for new messages |
 | `fmsg get <message-id>` | Retrieve a message by ID, including the short text body for `text/*` messages |
 | `fmsg send <recipient> <file\|text\|->` | Send a message (file path, text, or `-` for stdin) |
 | `fmsg draft create <recipient> <file\|text\|->` | Create a draft message without sending |
@@ -89,10 +88,6 @@ fmsg list --limit 10 --offset 20
 # List authored messages (sent + drafts)
 fmsg sent
 fmsg sent --limit 10 --offset 20
-
-# Wait for a new message
-fmsg wait
-fmsg wait --since-id 120 --timeout 10
 
 # Get a specific message
 fmsg get 101
