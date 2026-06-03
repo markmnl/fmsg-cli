@@ -70,6 +70,13 @@ type Attachment struct {
 	Filename string `json:"filename"`
 }
 
+// AddToBatch is one batch of recipients added to a message in a single add-to call.
+type AddToBatch struct {
+	AddToFrom string   `json:"add_to_from"`
+	To        []string `json:"to"`
+	Time      float64  `json:"time"`
+}
+
 // MessageListItem represents a message in the list response.
 type MessageListItem struct {
 	ID          int64        `json:"id"`
@@ -82,8 +89,7 @@ type MessageListItem struct {
 	PID         *int64       `json:"pid"`
 	From        string       `json:"from"`
 	To          []string     `json:"to"`
-	AddTo       []string     `json:"add_to"`
-	AddToFrom   *string      `json:"add_to_from"`
+	AddTo       []AddToBatch `json:"add_to"`
 	Time        *float64     `json:"time"`
 	Topic       string       `json:"topic"`
 	Type        string       `json:"type"`
@@ -102,8 +108,7 @@ type Message struct {
 	PID         *int64       `json:"pid"`
 	From        string       `json:"from"`
 	To          []string     `json:"to"`
-	AddTo       []string     `json:"add_to"`
-	AddToFrom   *string      `json:"add_to_from"`
+	AddTo       []AddToBatch `json:"add_to"`
 	Time        *float64     `json:"time"`
 	Topic       string       `json:"topic"`
 	Type        string       `json:"type"`

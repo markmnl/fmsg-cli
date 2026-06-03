@@ -37,11 +37,16 @@ var getCmd = &cobra.Command{
 		fmt.Printf("From: %s\n", msg.From)
 		fmt.Printf("To:   %s\n", string(to))
 		if len(msg.AddTo) > 0 {
-			addTo, _ := json.Marshal(msg.AddTo)
+			var flat []string
+			for _, b := range msg.AddTo {
+				flat = append(flat, b.To...)
+			}
+			addTo, _ := json.Marshal(flat)
 			fmt.Printf("Add-To: %s\n", string(addTo))
-		}
-		if msg.AddToFrom != nil {
-			fmt.Printf("Add-To-From: %s\n", *msg.AddToFrom)
+			for _, b := range msg.AddTo {
+				to, _ := json.Marshal(b.To)
+				fmt.Printf("  added by %s at %f: %s\n", b.AddToFrom, b.Time, string(to))
+			}
 		}
 		if msg.PID != nil {
 			fmt.Printf("PID:  %d\n", *msg.PID)
