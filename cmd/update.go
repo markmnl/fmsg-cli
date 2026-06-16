@@ -6,9 +6,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/markmnl/fmsg-cli/internal/api"
-	"github.com/markmnl/fmsg-cli/internal/auth"
-	"github.com/markmnl/fmsg-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -32,20 +29,19 @@ var updateCmd = &cobra.Command{
 Only provided fields are updated; recipients in to are fully replaced.`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		creds, err := auth.LoadValid()
+		client, manager := newAuthenticatedClient()
+		user, err := manager.User(cmd.Context())
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 
-		client := api.New(config.GetAPIURL(), creds.Token)
 		msgID, err := resolveMessageID(client, args[0])
 		if err != nil {
 			return err
 		}
 
 		msg := map[string]interface{}{
-			"from":    creds.User,
+			"from":    user,
 			"version": 1,
 		}
 

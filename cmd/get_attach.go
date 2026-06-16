@@ -2,12 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 
-	"github.com/markmnl/fmsg-cli/internal/api"
-	"github.com/markmnl/fmsg-cli/internal/auth"
-	"github.com/markmnl/fmsg-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -16,13 +12,7 @@ var getAttachCmd = &cobra.Command{
 	Short: "Download an attachment from a message",
 	Args:  cobra.ExactArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		creds, err := auth.LoadValid()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-
-		client := api.New(config.GetAPIURL(), creds.Token)
+		client, _ := newAuthenticatedClient()
 		resolvedID, err := resolveMessageID(client, args[0])
 		if err != nil {
 			return err

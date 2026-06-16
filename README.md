@@ -16,21 +16,37 @@ go build -o fmsg
 
 ### Authentication
 
-Before using any other command, log in:
+Before using any other command, log in with either a main-account user JWT or a sub-account API key:
 
 ```sh
-fmsg login [address]
+fmsg login [api-key|jwt]
 ```
 
-You can optionally provide the fmsg address directly (e.g. `@user@example.com`) to skip the prompt:
+For main-account use, pass a JWT issued by the identity provider configured for your fmsg-webapi deployment:
 
 ```sh
-fmsg login @user@example.com
+fmsg login eyJ...
 ```
 
-If the provided value contains no `@` symbols (argument or prompted input), it is treated as just the user part and expanded to `@<user>@<domain>` using the configured `FMSG_API_URL` domain.
+The JWT must contain the fmsg address claim expected by the server, commonly `fmsg_address`. If the token uses a deployment-specific claim that the CLI cannot recognize, pass the address explicitly:
 
-If no address argument is provided, you will be prompted interactively. A JWT token is generated locally and stored in `$XDG_CONFIG_HOME/fmsg/auth.json` (typically `~/.config/fmsg/auth.json`) with `0600` permissions. The token is valid for 24 hours.
+```sh
+fmsg login --address @user@example.com eyJ...
+```
+
+User JWTs are used directly until their JWT expiry. When they expire, run `fmsg login` again with a fresh JWT.
+
+For sub-account or programmatic use, pass an opaque fmsg API key:
+
+```sh
+fmsg login fmsgk_<key_id>_<secret>
+```
+
+API keys are exchanged with `POST /fmsg/token` for short-lived first-party JWTs. The CLI caches the returned JWT and refreshes it automatically within five minutes of expiry. The default server token lifetime is 12 hours.
+
+Credentials are stored in `$XDG_CONFIG_HOME/fmsg/auth.json` (typically `~/.config/fmsg/auth.json`) with `0600` permissions.
+
+For non-interactive use, set `FMSG_API_KEY` instead of running `fmsg login`. Environment-provided API keys override stored credentials and are not written to disk.
 
 ### Configuration
 
@@ -39,24 +55,22 @@ If a `.env` file exists in the working directory it is loaded automatically on s
 | Variable      | Default                  | Description               |
 |---------------|--------------------------|---------------------------|
 | `FMSG_API_URL` | `http://127.0.0.1:8000` | Base URL of the fmsg-webapi |
-| `FMSG_JWT_SECRET` | *(required)* | Secret used to sign JWT tokens (must match the server) |
+| `FMSG_API_KEY` | *(optional)* | Opaque API key used for non-interactive sub-account authentication |
 
-`FMSG_JWT_SECRET` formats:
-- Plain string (used as-is): `FMSG_JWT_SECRET=super-secret`
-- Base64 with `base64:` prefix (decoded to raw bytes): `FMSG_JWT_SECRET=base64:c3VwZXItc2VjcmV0`
+Programmatic clients use API keys issued by fmsg-webapi.
 
 ### Commands
 
 | Command | Description |
 |---------|-------------|
-| `fmsg login [address]` | Authenticate and store a local token (optional address argument) |
+| `fmsg login [api-key\|jwt] [--address @user@example.com]` | Authenticate and store credentials |
 | `fmsg list` \| `fmsg ls [--limit N] [--offset N]` | List messages for the authenticated user |
 | `fmsg sent [--limit N] [--offset N]` | List messages authored by the authenticated user |
 | `fmsg get <message-id>` | Retrieve a message by ID, including the short text body for `text/*` messages |
 | `fmsg send <recipient> <file\|text\|->` | Send a message (file path, text, or `-` for stdin) |
 | `fmsg draft create <recipient> <file\|text\|->` | Create a draft message without sending |
 | `fmsg draft send <message-id>` | Send a previously created draft |
-| `fmsg update <message-id> [file\|text\|->` | Update a draft message |
+| `fmsg update <message-id> [file\|text\|-]` | Update a draft message |
 | `fmsg del <message-id>` | Delete a draft message by ID |
 | `fmsg add-to <message-id> <recipient> [recipient...]` | Add additional recipients to a message |
 | `fmsg attach <message-id> <file>` | Upload a file attachment to a message |
@@ -74,12 +88,25 @@ recent message without knowing its ID.  The index is resolved against your inbox
 | `-2`  | Second most recent  |
 | `-N`  | N-th most recent    |
 
+Message creation commands support these optional flags:
+
+| Command | Flags |
+|---------|-------|
+| `fmsg send` | `--pid, -p`, `--topic`, `--important`, `--no-reply` |
+| `fmsg draft create` | `--pid, -p`, `--topic`, `--important`, `--no-reply` |
+| `fmsg update` | `--to`, `--topic`, `--type`, `--pid, -p`, `--important`, `--no-reply` |
+
 ### Examples
 
 ```sh
 # Login
 fmsg login
-fmsg login @user@example.com
+fmsg login eyJ...
+fmsg login --address @user@example.com eyJ...
+fmsg login fmsgk_<key_id>_<secret>
+
+# Non-interactive sub-account auth
+FMSG_API_KEY=fmsgk_<key_id>_<secret> fmsg list
 
 # List messages
 fmsg list

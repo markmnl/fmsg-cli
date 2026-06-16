@@ -3,11 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
-	"github.com/markmnl/fmsg-cli/internal/api"
-	"github.com/markmnl/fmsg-cli/internal/auth"
-	"github.com/markmnl/fmsg-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -20,13 +16,7 @@ var sentCmd = &cobra.Command{
 	Use:   "sent",
 	Short: "List messages authored by the authenticated user",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		creds, err := auth.LoadValid()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-
-		client := api.New(config.GetAPIURL(), creds.Token)
+		client, _ := newAuthenticatedClient()
 		messages, err := client.ListSentMessages(sentLimit, sentOffset)
 		if err != nil {
 			return err

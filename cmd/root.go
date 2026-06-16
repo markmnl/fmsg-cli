@@ -16,7 +16,7 @@ var rootCmd = &cobra.Command{
 
 Before using any command, authenticate with:
 
-  fmsg login`,
+  fmsg login [api-key|jwt]`,
 }
 
 // injectDashDash inserts a "--" sentinel into os.Args immediately before the

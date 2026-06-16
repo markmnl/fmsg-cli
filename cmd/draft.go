@@ -7,9 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/markmnl/fmsg-cli/internal/api"
-	"github.com/markmnl/fmsg-cli/internal/auth"
-	"github.com/markmnl/fmsg-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -31,13 +28,13 @@ var draftCreateCmd = &cobra.Command{
 	Long: `Create a draft message for a recipient. The second argument can be:
   - A path to a file (must exist on disk)
   - A text string
-  - "-" to read from stdin`,
+ - "-" to read from stdin`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		creds, err := auth.LoadValid()
+		client, manager := newAuthenticatedClient()
+		user, err := manager.User(cmd.Context())
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 
 		recipient := args[0]
@@ -59,7 +56,7 @@ var draftCreateCmd = &cobra.Command{
 		}
 
 		msg := map[string]interface{}{
-			"from":    creds.User,
+			"from":    user,
 			"to":      []string{recipient},
 			"version": 1,
 			"type":    "text/plain",
@@ -84,7 +81,6 @@ var draftCreateCmd = &cobra.Command{
 			return fmt.Errorf("encoding message: %w", err)
 		}
 
-		client := api.New(config.GetAPIURL(), creds.Token)
 		draft, err := client.CreateMessage(payload)
 		if err != nil {
 			return fmt.Errorf("creating draft: %w", err)
@@ -101,13 +97,7 @@ var draftSendCmd = &cobra.Command{
 	Short: "Send a previously created draft",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		creds, err := auth.LoadValid()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-
-		client := api.New(config.GetAPIURL(), creds.Token)
+		client, _ := newAuthenticatedClient()
 		msgID, err := resolveMessageID(client, args[0])
 		if err != nil {
 			return err
