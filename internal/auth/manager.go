@@ -113,7 +113,7 @@ func (m *Manager) Login(ctx context.Context, apiKey string) (Token, error) {
 	if apiKey == "" {
 		return Token{}, fmt.Errorf("API key must not be empty")
 	}
-	if strings.Contains(apiKey, "@") {
+	if !strings.HasPrefix(apiKey, "fmsgk_") {
 		return Token{}, fmt.Errorf("API-key login expects a key starting with fmsgk_; for main-account login, pass a user JWT")
 	}
 
