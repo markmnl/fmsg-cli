@@ -7,9 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/markmnl/fmsg-cli/internal/api"
-	"github.com/markmnl/fmsg-cli/internal/auth"
-	"github.com/markmnl/fmsg-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -26,13 +23,13 @@ var sendCmd = &cobra.Command{
 	Long: `Send a message to a recipient. The second argument can be:
   - A path to a file (must exist on disk)
   - A text string
-  - "-" to read from stdin`,
+ - "-" to read from stdin`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		creds, err := auth.LoadValid()
+		client, manager := newAuthenticatedClient()
+		user, err := manager.User(cmd.Context())
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 
 		recipient := args[0]
@@ -58,7 +55,7 @@ var sendCmd = &cobra.Command{
 
 		// Build a draft payload.
 		msg := map[string]interface{}{
-			"from":    creds.User,
+			"from":    user,
 			"to":      []string{recipient},
 			"version": 1,
 			"type":    "text/plain",
@@ -81,8 +78,6 @@ var sendCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("encoding message: %w", err)
 		}
-
-		client := api.New(config.GetAPIURL(), creds.Token)
 
 		draft, err := client.CreateMessage(payload)
 		if err != nil {

@@ -11,9 +11,14 @@ import (
 
 // Credentials holds the stored authentication state.
 type Credentials struct {
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expires_at"`
-	User      string    `json:"user"`
+	Version     int       `json:"version"`
+	AuthType    string    `json:"auth_type,omitempty"`
+	APIKey      string    `json:"api_key,omitempty"`
+	AccessToken string    `json:"access_token,omitempty"`
+	TokenType   string    `json:"token_type,omitempty"`
+	ExpiresAt   time.Time `json:"expires_at,omitempty"`
+	User        string    `json:"user,omitempty"`
+	APIURL      string    `json:"api_url,omitempty"`
 }
 
 // storePath returns the path to auth.json, creating parent directories as needed.
@@ -65,19 +70,6 @@ func Load() (Credentials, error) {
 	var creds Credentials
 	if err := json.Unmarshal(data, &creds); err != nil {
 		return Credentials{}, fmt.Errorf("decoding credentials: %w", err)
-	}
-	return creds, nil
-}
-
-// LoadValid loads stored credentials and returns an error if they are missing
-// or expired. The error message instructs the user to run fmsg login.
-func LoadValid() (Credentials, error) {
-	creds, err := Load()
-	if err != nil {
-		return Credentials{}, fmt.Errorf("you must login first using: fmsg login")
-	}
-	if time.Now().After(creds.ExpiresAt) {
-		return Credentials{}, fmt.Errorf("token expired — you must login first using: fmsg login")
 	}
 	return creds, nil
 }

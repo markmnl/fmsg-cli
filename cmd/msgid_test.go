@@ -52,7 +52,7 @@ func newTestServer(t *testing.T, ids []int64) *httptest.Server {
 func TestResolveMessageID_Positive(t *testing.T) {
 	srv := newTestServer(t, []int64{100, 50, 10})
 	defer srv.Close()
-	client := api.New(srv.URL, "token")
+	client := api.New(srv.URL, api.StaticTokenProvider("token"))
 
 	id, err := resolveMessageID(client, "42")
 	if err != nil {
@@ -66,7 +66,7 @@ func TestResolveMessageID_Positive(t *testing.T) {
 func TestResolveMessageID_NegativeOne(t *testing.T) {
 	srv := newTestServer(t, []int64{100, 50, 10})
 	defer srv.Close()
-	client := api.New(srv.URL, "token")
+	client := api.New(srv.URL, api.StaticTokenProvider("token"))
 
 	id, err := resolveMessageID(client, "-1")
 	if err != nil {
@@ -80,7 +80,7 @@ func TestResolveMessageID_NegativeOne(t *testing.T) {
 func TestResolveMessageID_NegativeTwo(t *testing.T) {
 	srv := newTestServer(t, []int64{100, 50, 10})
 	defer srv.Close()
-	client := api.New(srv.URL, "token")
+	client := api.New(srv.URL, api.StaticTokenProvider("token"))
 
 	id, err := resolveMessageID(client, "-2")
 	if err != nil {
@@ -94,7 +94,7 @@ func TestResolveMessageID_NegativeTwo(t *testing.T) {
 func TestResolveMessageID_NegativeThree(t *testing.T) {
 	srv := newTestServer(t, []int64{100, 50, 10})
 	defer srv.Close()
-	client := api.New(srv.URL, "token")
+	client := api.New(srv.URL, api.StaticTokenProvider("token"))
 
 	id, err := resolveMessageID(client, "-3")
 	if err != nil {
@@ -108,7 +108,7 @@ func TestResolveMessageID_NegativeThree(t *testing.T) {
 func TestResolveMessageID_NegativeOutOfRange(t *testing.T) {
 	srv := newTestServer(t, []int64{100, 50, 10})
 	defer srv.Close()
-	client := api.New(srv.URL, "token")
+	client := api.New(srv.URL, api.StaticTokenProvider("token"))
 
 	_, err := resolveMessageID(client, "-4")
 	if err == nil {
@@ -117,7 +117,7 @@ func TestResolveMessageID_NegativeOutOfRange(t *testing.T) {
 }
 
 func TestResolveMessageID_Zero(t *testing.T) {
-	client := api.New("http://unused", "token")
+	client := api.New("http://unused", api.StaticTokenProvider("token"))
 	_, err := resolveMessageID(client, "0")
 	if err == nil {
 		t.Fatal("expected error for ID=0")
@@ -125,7 +125,7 @@ func TestResolveMessageID_Zero(t *testing.T) {
 }
 
 func TestResolveMessageID_Invalid(t *testing.T) {
-	client := api.New("http://unused", "token")
+	client := api.New("http://unused", api.StaticTokenProvider("token"))
 	_, err := resolveMessageID(client, "abc")
 	if err == nil {
 		t.Fatal("expected error for non-numeric input")

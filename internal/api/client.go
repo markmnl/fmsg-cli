@@ -3,6 +3,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,20 +13,34 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // Client is a reusable HTTP client for fmsg-webapi.
 type Client struct {
 	BaseURL string
-	Token   string
+	Auth    TokenProvider
 	HTTP    *http.Client
 }
 
-// New creates a Client with the given base URL and JWT token.
-func New(baseURL, token string) *Client {
+// TokenProvider returns an access token for authenticated API requests.
+type TokenProvider interface {
+	AccessToken(ctx context.Context, forceRefresh bool) (string, error)
+}
+
+// StaticTokenProvider is useful for tests that do not exercise auth refresh.
+type StaticTokenProvider string
+
+// AccessToken returns the static token.
+func (p StaticTokenProvider) AccessToken(ctx context.Context, forceRefresh bool) (string, error) {
+	return string(p), nil
+}
+
+// New creates a Client with the given base URL and token provider.
+func New(baseURL string, auth TokenProvider) *Client {
 	return &Client{
-		BaseURL: baseURL,
-		Token:   token,
+		BaseURL: strings.TrimRight(baseURL, "/"),
+		Auth:    auth,
 		HTTP:    &http.Client{},
 	}
 }
@@ -40,10 +55,63 @@ func (e *apiError) Error() string {
 	return fmt.Sprintf("API error %d: %s", e.StatusCode, e.Body)
 }
 
-// do performs an HTTP request, attaching the Authorization header.
+// do performs an HTTP request, attaching the Authorization header. If the API
+// rejects the cached token, it refreshes once and retries replayable requests.
 func (c *Client) do(req *http.Request) (*http.Response, error) {
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-	resp, err := c.HTTP.Do(req)
+	resp, err := c.doWithToken(req, false)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		return resp, nil
+	}
+
+	if req.Body != nil && req.GetBody == nil {
+		return resp, nil
+	}
+	resp.Body.Close()
+
+	retry := req.Clone(req.Context())
+	if req.GetBody != nil {
+		body, err := req.GetBody()
+		if err != nil {
+			return nil, fmt.Errorf("preparing request retry: %w", err)
+		}
+		retry.Body = body
+		retry.GetBody = req.GetBody
+	}
+
+	resp, err = c.doWithToken(retry, true)
+	if err != nil {
+		return nil, fmt.Errorf("refreshing access token after 401: %w", err)
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		msg := string(bytes.TrimSpace(body))
+		if msg == "" {
+			msg = http.StatusText(resp.StatusCode)
+		}
+		return nil, fmt.Errorf("authentication failed after refreshing token; run fmsg login with valid credentials: %s", msg)
+	}
+	return resp, nil
+}
+
+func (c *Client) doWithToken(req *http.Request, forceRefresh bool) (*http.Response, error) {
+	if c.Auth == nil {
+		return nil, fmt.Errorf("missing token provider")
+	}
+	token, err := c.Auth.AccessToken(req.Context(), forceRefresh)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	client := c.HTTP
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("network error: %w", err)
 	}
