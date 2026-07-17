@@ -77,6 +77,12 @@ Programmatic clients use API keys issued by fmsg-webapi.
 | `fmsg get-attach <message-id> <filename> <output-file>` | Download an attachment |
 | `fmsg get-data <message-id> [output-file]` | Download message body data (stdout if no output file) |
 | `fmsg rm-attach <message-id> <filename>` | Remove an attachment from a message |
+| `fmsg sub-accounts list` | List sub-accounts owned by the authenticated user |
+| `fmsg sub-accounts get <agent>` | Retrieve a single sub-account grant |
+| `fmsg sub-accounts create <agent> --cidr <cidrs> --expires <ts>` | Derive a new sub-account, printing its plaintext API key once |
+| `fmsg sub-accounts update-cidrs <agent> --cidr <cidrs>` | Replace a sub-account's allowed CIDRs without rotating its key |
+| `fmsg sub-accounts rotate-key <agent> --expires <ts>` | Rotate a sub-account's API key, printing the new plaintext key once |
+| `fmsg sub-accounts delete <agent>` | Delete a sub-account grant |
 
 Wherever a `<message-id>` is accepted you may supply a **negative index** to refer to a
 recent message without knowing its ID.  The index is resolved against your inbox
@@ -167,4 +173,12 @@ fmsg get-data 101 ./message-body.txt
 
 # Remove attachment
 fmsg rm-attach 101 report.pdf
+
+# Manage sub-accounts (requires a main-account user JWT, not a sub-account key)
+fmsg sub-accounts list
+fmsg sub-accounts create bot --cidr 203.0.113.0/24 --expires 2026-12-31T00:00:00Z
+fmsg sub-accounts get bot
+fmsg sub-accounts update-cidrs bot --cidr 203.0.113.0/24,198.51.100.0/24
+fmsg sub-accounts rotate-key bot --expires 2027-03-31T00:00:00Z
+fmsg sub-accounts delete bot
 ```

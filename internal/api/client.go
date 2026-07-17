@@ -202,6 +202,25 @@ type AddRecipientsResponse struct {
 	Added int   `json:"added"`
 }
 
+// SubAccount represents an API-access grant returned by the sub-accounts routes.
+// APIKey is only populated once, immediately after creation or key rotation.
+type SubAccount struct {
+	Agent        string   `json:"agent"`
+	Addr         string   `json:"addr"`
+	GrantType    string   `json:"grant_type"`
+	DisplayName  string   `json:"display_name,omitempty"`
+	KeyID        string   `json:"key_id,omitempty"`
+	AllowedCIDRs []string `json:"allowed_cidrs"`
+	KeyExpiresAt string   `json:"key_expires_at"`
+	APIKey       string   `json:"api_key,omitempty"`
+}
+
+// SubAccountList is the response from listing sub-accounts.
+type SubAccountList struct {
+	MaxSubAccounts int          `json:"max_sub_accounts"`
+	SubAccounts    []SubAccount `json:"sub_accounts"`
+}
+
 // ListMessages returns messages for the authenticated user.
 func (c *Client) ListMessages(limit, offset int) ([]MessageListItem, error) {
 	u, err := url.Parse(c.BaseURL + "/fmsg")
@@ -544,4 +563,166 @@ func (c *Client) DownloadData(id, outputPath string) error {
 		return err
 	}
 	return nil
+}
+
+// ListSubAccounts returns the API-access grants owned by the authenticated user.
+func (c *Client) ListSubAccounts() (*SubAccountList, error) {
+	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/fmsg/sub-accounts", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := checkStatus(resp); err != nil {
+		return nil, err
+	}
+
+	var list SubAccountList
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return &list, nil
+}
+
+// GetSubAccount retrieves a single sub-account grant by agent name.
+func (c *Client) GetSubAccount(agent string) (*SubAccount, error) {
+	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/fmsg/sub-accounts/"+url.PathEscape(agent), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := checkStatus(resp); err != nil {
+		return nil, err
+	}
+
+	var account SubAccount
+	if err := json.NewDecoder(resp.Body).Decode(&account); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return &account, nil
+}
+
+// CreateSubAccount derives a new sub-account and returns its plaintext API key.
+func (c *Client) CreateSubAccount(agent string, allowedCIDRs []string, keyExpiresAt string) (*SubAccount, error) {
+	payload, err := json.Marshal(map[string]interface{}{
+		"agent":          agent,
+		"allowed_cidrs":  allowedCIDRs,
+		"key_expires_at": keyExpiresAt,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("encoding request: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/fmsg/sub-accounts", bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := checkStatus(resp); err != nil {
+		return nil, err
+	}
+
+	var account SubAccount
+	if err := json.NewDecoder(resp.Body).Decode(&account); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return &account, nil
+}
+
+// UpdateSubAccountCIDRs replaces a sub-account's allowed CIDRs without rotating its key.
+func (c *Client) UpdateSubAccountCIDRs(agent string, allowedCIDRs []string) (*SubAccount, error) {
+	payload, err := json.Marshal(map[string]interface{}{
+		"allowed_cidrs": allowedCIDRs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("encoding request: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, c.BaseURL+"/fmsg/sub-accounts/"+url.PathEscape(agent), bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := checkStatus(resp); err != nil {
+		return nil, err
+	}
+
+	var account SubAccount
+	if err := json.NewDecoder(resp.Body).Decode(&account); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return &account, nil
+}
+
+// RotateSubAccountKey rotates a sub-account's API key and returns the new plaintext key.
+func (c *Client) RotateSubAccountKey(agent, keyExpiresAt string) (*SubAccount, error) {
+	payload, err := json.Marshal(map[string]interface{}{
+		"key_expires_at": keyExpiresAt,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("encoding request: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/fmsg/sub-accounts/"+url.PathEscape(agent)+"/rotate-key", bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := checkStatus(resp); err != nil {
+		return nil, err
+	}
+
+	var account SubAccount
+	if err := json.NewDecoder(resp.Body).Decode(&account); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return &account, nil
+}
+
+// DeleteSubAccount deletes a sub-account grant.
+func (c *Client) DeleteSubAccount(agent string) error {
+	req, err := http.NewRequest(http.MethodDelete, c.BaseURL+"/fmsg/sub-accounts/"+url.PathEscape(agent), nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return checkStatus(resp)
 }
