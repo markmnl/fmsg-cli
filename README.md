@@ -64,6 +64,7 @@ Programmatic clients use API keys issued by fmsg-webapi.
 | Command | Description |
 |---------|-------------|
 | `fmsg login [api-key\|jwt] [--address @user@example.com]` | Authenticate and store credentials |
+| `fmsg whoami` | Print the authenticated fmsg address, API URL, and token expiry |
 | `fmsg list` \| `fmsg ls [--limit N] [--offset N]` | List messages for the authenticated user |
 | `fmsg sent [--limit N] [--offset N]` | List messages authored by the authenticated user |
 | `fmsg get <message-id>` | Retrieve a message by ID, including the short text body for `text/*` messages |
@@ -138,6 +139,10 @@ fmsg login fmsgk_<key_id>_<secret>
 
 # Non-interactive sub-account auth
 FMSG_API_KEY=fmsgk_<key_id>_<secret> fmsg list
+
+# Who am I authenticated as?
+fmsg whoami
+fmsg --json whoami
 
 # List messages
 fmsg list
