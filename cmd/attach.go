@@ -20,11 +20,16 @@ var attachCmd = &cobra.Command{
 		messageID := strconv.FormatInt(resolvedID, 10)
 		filePath := args[1]
 
-		if err := client.UploadAttachment(messageID, filePath); err != nil {
+		result, err := client.UploadAttachment(messageID, filePath)
+		if err != nil {
 			return err
 		}
 
-		fmt.Printf("Attachment uploaded to message %s\n", messageID)
+		if jsonOutput {
+			return printJSON(result)
+		}
+
+		fmt.Printf("Attachment %s uploaded to message %s\n", result.Filename, messageID)
 		return nil
 	},
 }

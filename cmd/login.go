@@ -51,6 +51,14 @@ Optionally supply the credential as an argument to skip the prompt.`,
 			return err
 		}
 
+		if jsonOutput {
+			return printJSON(map[string]string{
+				"user":       tok.User,
+				"expires_at": tok.ExpiresAt.UTC().Format("2006-01-02T15:04:05Z"),
+				"api_url":    config.GetAPIURL(),
+			})
+		}
+
 		fmt.Printf("Logged in as %s (token expires %s)\n", tok.User, tok.ExpiresAt.UTC().Format("2006-01-02T15:04:05Z"))
 		fmt.Printf("API URL: %s\n", config.GetAPIURL())
 		return nil

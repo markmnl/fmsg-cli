@@ -86,6 +86,10 @@ var draftCreateCmd = &cobra.Command{
 			return fmt.Errorf("creating draft: %w", err)
 		}
 
+		if jsonOutput {
+			return printJSON(draft)
+		}
+
 		fmt.Println("Draft created")
 		fmt.Printf("ID: %d\n", draft.ID)
 		return nil
@@ -106,6 +110,10 @@ var draftSendCmd = &cobra.Command{
 		sent, err := client.SendMessage(msgID)
 		if err != nil {
 			return fmt.Errorf("sending draft: %w", err)
+		}
+
+		if jsonOutput {
+			return printJSON(sent)
 		}
 
 		fmt.Println("Draft sent successfully")

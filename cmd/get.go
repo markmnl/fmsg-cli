@@ -23,6 +23,10 @@ var getCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOutput {
+			return printJSON(msg)
+		}
+
 		to, _ := json.Marshal(msg.To)
 		fmt.Printf("From: %s\n", msg.From)
 		fmt.Printf("To:   %s\n", string(to))

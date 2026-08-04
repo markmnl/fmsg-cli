@@ -89,6 +89,10 @@ var sendCmd = &cobra.Command{
 			return fmt.Errorf("sending message: %w", err)
 		}
 
+		if jsonOutput {
+			return printJSON(sent)
+		}
+
 		fmt.Println("Message sent successfully")
 		fmt.Printf("ID: %d\n", sent.ID)
 		fmt.Printf("Time: %s\n", time.Unix(int64(sent.Time), 0).UTC().Format(time.RFC3339))

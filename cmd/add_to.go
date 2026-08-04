@@ -24,6 +24,10 @@ var addToCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOutput {
+			return printJSON(result)
+		}
+
 		fmt.Printf("Added %d recipient(s) to message %d\n", result.Added, result.ID)
 		return nil
 	},

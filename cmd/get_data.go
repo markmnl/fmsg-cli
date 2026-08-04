@@ -27,6 +27,10 @@ var getDataCmd = &cobra.Command{
 				return err
 			}
 
+			if jsonOutput {
+				return printJSON(map[string]string{"id": messageIDStr, "saved_to": outputPath})
+			}
+
 			fmt.Printf("Data saved to %s\n", outputPath)
 			return nil
 		}

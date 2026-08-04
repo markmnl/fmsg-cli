@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/markmnl/fmsg-cli/internal/api"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +21,13 @@ var sentCmd = &cobra.Command{
 		messages, err := client.ListSentMessages(sentLimit, sentOffset)
 		if err != nil {
 			return err
+		}
+
+		if jsonOutput {
+			if messages == nil {
+				messages = []api.MessageListItem{}
+			}
+			return printJSON(messages)
 		}
 
 		if len(messages) == 0 {

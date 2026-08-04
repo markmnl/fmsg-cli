@@ -102,6 +102,31 @@ Message creation commands support these optional flags:
 | `fmsg draft create` | `--pid, -p`, `--topic`, `--important`, `--no-reply` |
 | `fmsg update` | `--to`, `--topic`, `--type`, `--pid, -p`, `--important`, `--no-reply` |
 
+### JSON output
+
+Every command accepts the global `--json` flag to emit a single JSON value on
+stdout instead of human-readable text — intended for scripts and programmatic
+callers:
+
+- Commands that wrap an API response print that response faithfully, including
+  fields the human output omits: per-recipient delivery state (`to_delivery`
+  with `time_delivered` and `response_code`), `read`/`time_read`, and add-to
+  `batch_id`s. `list`/`sent` print a JSON array (`[]` when empty); `get` prints
+  the message object; `send`/`draft send` print `{"id": …, "time": …}`;
+  `draft create` prints `{"id": …}`; `add-to` prints `{"id": …, "added": …}`;
+  `attach` prints the server's `{"filename": …, "size": …}`; the `sub-accounts`
+  commands print the grant object(s), including the one-time `api_key` on
+  `create`/`rotate-key`.
+- Commands whose result is local-only print a small confirmation object, e.g.
+  `update`/`del` print `{"id": …}` and `get-attach` prints
+  `{"filename": …, "saved_to": …}`.
+- `get-data` without an output file still streams raw body bytes to stdout —
+  `--json` does not change it.
+- Errors are unchanged: plain text on stderr, exit code 1.
+
+Note: flags must precede a negative message index (`fmsg --json get -1`), since
+everything after the negative index is treated as positional.
+
 ### Examples
 
 ```sh
@@ -117,6 +142,10 @@ FMSG_API_KEY=fmsgk_<key_id>_<secret> fmsg list
 # List messages
 fmsg list
 fmsg list --limit 10 --offset 20
+
+# Machine-readable output for scripting
+fmsg --json list
+fmsg --json get 101 | jq .pid
 
 # List authored messages (sent + drafts)
 fmsg sent

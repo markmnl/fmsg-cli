@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"unicode"
@@ -17,6 +18,19 @@ var rootCmd = &cobra.Command{
 Before using any command, authenticate with:
 
   fmsg login [api-key|jwt]`,
+}
+
+// jsonOutput is set by the persistent --json flag. When true, commands emit a
+// single JSON value on stdout instead of human-readable text. Commands whose
+// primary output is raw data (get-data to stdout) are unaffected, and errors
+// are still plain text on stderr.
+var jsonOutput bool
+
+// printJSON writes v to stdout as a single line of JSON.
+func printJSON(v interface{}) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetEscapeHTML(false)
+	return enc.Encode(v)
 }
 
 // injectDashDash inserts a "--" sentinel into os.Args immediately before the
@@ -42,6 +56,10 @@ func injectDashDash() {
 			return
 		}
 	}
+}
+
+func init() {
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "emit machine-readable JSON output")
 }
 
 // Execute runs the root command and exits on error.
