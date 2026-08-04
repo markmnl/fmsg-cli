@@ -24,6 +24,10 @@ var getAttachCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOutput {
+			return printJSON(map[string]string{"filename": filename, "saved_to": outputPath})
+		}
+
 		fmt.Printf("Attachment saved to %s\n", outputPath)
 		return nil
 	},

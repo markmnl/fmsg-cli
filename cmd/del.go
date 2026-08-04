@@ -20,6 +20,10 @@ var delCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOutput {
+			return printJSON(map[string]int64{"id": msgID})
+		}
+
 		fmt.Printf("Message %d deleted\n", msgID)
 		return nil
 	},

@@ -96,6 +96,10 @@ Only provided fields are updated; recipients in to are fully replaced.`,
 			return err
 		}
 
+		if jsonOutput {
+			return printJSON(map[string]int64{"id": msgID})
+		}
+
 		fmt.Printf("Message %d updated\n", msgID)
 		return nil
 	},

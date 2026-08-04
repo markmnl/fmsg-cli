@@ -138,51 +138,66 @@ type Attachment struct {
 	Filename string `json:"filename"`
 }
 
+// RecipientDelivery is the delivery state of a message for one recipient.
+type RecipientDelivery struct {
+	Addr          string  `json:"addr"`
+	TimeDelivered *string `json:"time_delivered"`
+	ResponseCode  *int    `json:"response_code"`
+}
+
 // AddToBatch is one batch of recipients added to a message in a single add-to call.
 type AddToBatch struct {
-	AddToFrom string   `json:"add_to_from"`
-	To        []string `json:"to"`
-	Time      float64  `json:"time"`
+	BatchID    int64               `json:"batch_id"`
+	AddToFrom  string              `json:"add_to_from"`
+	To         []string            `json:"to"`
+	ToDelivery []RecipientDelivery `json:"to_delivery"`
+	Time       float64             `json:"time"`
 }
 
 // MessageListItem represents a message in the list response.
 type MessageListItem struct {
-	ID          int64        `json:"id"`
-	Version     int          `json:"version"`
-	HasPID      bool         `json:"has_pid"`
-	HasAddTo    bool         `json:"has_add_to"`
-	Important   bool         `json:"important"`
-	NoReply     bool         `json:"no_reply"`
-	Deflate     bool         `json:"deflate"`
-	PID         *int64       `json:"pid"`
-	From        string       `json:"from"`
-	To          []string     `json:"to"`
-	AddTo       []AddToBatch `json:"add_to"`
-	Time        *float64     `json:"time"`
-	Topic       string       `json:"topic"`
-	Type        string       `json:"type"`
-	Size        int          `json:"size"`
-	Attachments []Attachment `json:"attachments"`
+	ID          int64               `json:"id"`
+	Version     int                 `json:"version"`
+	HasPID      bool                `json:"has_pid"`
+	HasAddTo    bool                `json:"has_add_to"`
+	Important   bool                `json:"important"`
+	NoReply     bool                `json:"no_reply"`
+	Deflate     bool                `json:"deflate"`
+	PID         *int64              `json:"pid"`
+	From        string              `json:"from"`
+	To          []string            `json:"to"`
+	ToDelivery  []RecipientDelivery `json:"to_delivery"`
+	AddTo       []AddToBatch        `json:"add_to"`
+	Time        *float64            `json:"time"`
+	Topic       string              `json:"topic"`
+	Type        string              `json:"type"`
+	Size        int                 `json:"size"`
+	Read        bool                `json:"read"`
+	TimeRead    *float64            `json:"time_read"`
+	Attachments []Attachment        `json:"attachments"`
 }
 
 // Message represents a fmsg message as exchanged over the HTTP API.
 type Message struct {
-	Version     int          `json:"version"`
-	HasPID      bool         `json:"has_pid"`
-	HasAddTo    bool         `json:"has_add_to"`
-	Important   bool         `json:"important"`
-	NoReply     bool         `json:"no_reply"`
-	Deflate     bool         `json:"deflate"`
-	PID         *int64       `json:"pid"`
-	From        string       `json:"from"`
-	To          []string     `json:"to"`
-	AddTo       []AddToBatch `json:"add_to"`
-	Time        *float64     `json:"time"`
-	Topic       string       `json:"topic"`
-	Type        string       `json:"type"`
-	Size        int          `json:"size"`
-	ShortText   *string      `json:"short_text"`
-	Attachments []Attachment `json:"attachments"`
+	Version     int                 `json:"version"`
+	HasPID      bool                `json:"has_pid"`
+	HasAddTo    bool                `json:"has_add_to"`
+	Important   bool                `json:"important"`
+	NoReply     bool                `json:"no_reply"`
+	Deflate     bool                `json:"deflate"`
+	PID         *int64              `json:"pid"`
+	From        string              `json:"from"`
+	To          []string            `json:"to"`
+	ToDelivery  []RecipientDelivery `json:"to_delivery"`
+	AddTo       []AddToBatch        `json:"add_to"`
+	Time        *float64            `json:"time"`
+	Topic       string              `json:"topic"`
+	Type        string              `json:"type"`
+	Size        int                 `json:"size"`
+	ShortText   *string             `json:"short_text"`
+	Read        bool                `json:"read"`
+	TimeRead    *float64            `json:"time_read"`
+	Attachments []Attachment        `json:"attachments"`
 }
 
 // CreateMessageResponse is the response from creating a message.
@@ -421,11 +436,17 @@ func (c *Client) DeleteMessage(id int64) error {
 	return checkStatus(resp)
 }
 
+// UploadAttachmentResponse is the response from uploading an attachment.
+type UploadAttachmentResponse struct {
+	Filename string `json:"filename"`
+	Size     int64  `json:"size"`
+}
+
 // UploadAttachment uploads a file as an attachment to a message using multipart.
-func (c *Client) UploadAttachment(messageID, filePath string) error {
+func (c *Client) UploadAttachment(messageID, filePath string) (*UploadAttachmentResponse, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
-		return fmt.Errorf("opening file: %w", err)
+		return nil, fmt.Errorf("opening file: %w", err)
 	}
 	defer f.Close()
 
@@ -433,28 +454,36 @@ func (c *Client) UploadAttachment(messageID, filePath string) error {
 	mw := multipart.NewWriter(&buf)
 	fw, err := mw.CreateFormFile("file", filepath.Base(filePath))
 	if err != nil {
-		return fmt.Errorf("creating form file: %w", err)
+		return nil, fmt.Errorf("creating form file: %w", err)
 	}
 	if _, err := io.Copy(fw, f); err != nil {
-		return fmt.Errorf("reading file: %w", err)
+		return nil, fmt.Errorf("reading file: %w", err)
 	}
 	if err := mw.Close(); err != nil {
-		return fmt.Errorf("closing multipart writer: %w", err)
+		return nil, fmt.Errorf("closing multipart writer: %w", err)
 	}
 
 	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/fmsg/"+messageID+"/attach", &buf)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 
 	resp, err := c.do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	return checkStatus(resp)
+	if err := checkStatus(resp); err != nil {
+		return nil, err
+	}
+
+	var result UploadAttachmentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return &result, nil
 }
 
 // DownloadAttachment downloads an attachment and writes it to outputPath.

@@ -32,6 +32,13 @@ var subAccountsListCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOutput {
+			if list.SubAccounts == nil {
+				list.SubAccounts = []api.SubAccount{}
+			}
+			return printJSON(list)
+		}
+
 		if len(list.SubAccounts) == 0 {
 			fmt.Printf("No sub-accounts (max %d).\n", list.MaxSubAccounts)
 			return nil
@@ -54,6 +61,9 @@ var subAccountsGetCmd = &cobra.Command{
 		account, err := client.GetSubAccount(args[0])
 		if err != nil {
 			return err
+		}
+		if jsonOutput {
+			return printJSON(account)
 		}
 		printSubAccount(*account)
 		return nil
@@ -79,6 +89,10 @@ var subAccountsCreateCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOutput {
+			return printJSON(account)
+		}
+
 		printSubAccount(*account)
 		fmt.Printf("API key (save now, shown once): %s\n", account.APIKey)
 		return nil
@@ -100,6 +114,9 @@ var subAccountsUpdateCIDRsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if jsonOutput {
+			return printJSON(account)
+		}
 		printSubAccount(*account)
 		return nil
 	},
@@ -120,6 +137,10 @@ var subAccountsRotateKeyCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOutput {
+			return printJSON(account)
+		}
+
 		printSubAccount(*account)
 		fmt.Printf("API key (save now, shown once): %s\n", account.APIKey)
 		return nil
@@ -134,6 +155,9 @@ var subAccountsDeleteCmd = &cobra.Command{
 		client, _ := newAuthenticatedClient()
 		if err := client.DeleteSubAccount(args[0]); err != nil {
 			return err
+		}
+		if jsonOutput {
+			return printJSON(map[string]string{"agent": args[0]})
 		}
 		fmt.Printf("Sub-account %q deleted\n", args[0])
 		return nil

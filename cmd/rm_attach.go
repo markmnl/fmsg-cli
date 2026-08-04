@@ -23,6 +23,10 @@ var rmAttachCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOutput {
+			return printJSON(map[string]string{"id": messageID, "filename": filename})
+		}
+
 		fmt.Printf("Attachment %s removed from message %s\n", filename, messageID)
 		return nil
 	},
