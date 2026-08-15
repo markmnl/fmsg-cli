@@ -67,6 +67,7 @@ Programmatic clients use API keys issued by fmsg-webapi.
 | `fmsg whoami` | Print the authenticated fmsg address, API URL, and token expiry |
 | `fmsg list` \| `fmsg ls [--limit N] [--offset N]` | List messages for the authenticated user |
 | `fmsg sent [--limit N] [--offset N]` | List messages authored by the authenticated user |
+| `fmsg watch [--events types] [--once] [--timeout D]` | Stream pushed events (new messages, deliveries) over the server's WebSocket until Ctrl-C |
 | `fmsg get <message-id>` | Retrieve a message by ID, including the short text body for `text/*` messages |
 | `fmsg send <recipient> <file\|text\|->` | Send a message (file path, text, or `-` for stdin) |
 | `fmsg draft create <recipient> <file\|text\|->` | Create a draft message without sending |
@@ -124,6 +125,15 @@ callers:
 - `get-data` without an output file still streams raw body bytes to stdout —
   `--json` does not change it.
 - Errors are unchanged: plain text on stderr, exit code 1.
+- `watch` streams one JSON line per event as it arrives —
+  `{"type":"new_msg","data":{...}}` with `data` in the `list` item shape —
+  preceded by `{"type":"ready"}` once the socket is open (and again after
+  every automatic reconnect, since events may have been missed while it was
+  down: do a `list` catch-up when you see it). Filter with `--events
+  new_msg,delivered,recipients_added`; `--once` exits after the first
+  matching event; `--timeout 30s` stops after that long. Exit code 0 after an
+  event or Ctrl-C, **2** if `--once`/`--timeout` ended before any event, 1 on
+  error.
 
 Note: flags must precede a negative message index (`fmsg --json get -1`), since
 everything after the negative index is treated as positional.
@@ -155,6 +165,11 @@ fmsg --json get 101 | jq .pid
 # List authored messages (sent + drafts)
 fmsg sent
 fmsg sent --limit 10 --offset 20
+
+# Wait for pushed events (new messages, delivery confirmations)
+fmsg watch                                  # until Ctrl-C
+fmsg --json watch --events new_msg --once   # one JSON line, then exit
+fmsg --json watch --timeout 30s             # exit 2 if nothing arrived
 
 # Get a specific message
 fmsg get 101

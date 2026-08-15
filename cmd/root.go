@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"unicode"
@@ -67,6 +68,9 @@ func Execute() {
 	injectDashDash()
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		if errors.Is(err, errNoEvent) {
+			os.Exit(exitNoEvent)
+		}
 		os.Exit(1)
 	}
 }
