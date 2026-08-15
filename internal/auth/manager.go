@@ -187,9 +187,20 @@ func (m *Manager) LoginJWT(token, address string) (Token, error) {
 	return tok, nil
 }
 
+// tokenFromEnv exchanges an environment-supplied API key, reusing the
+// in-memory token within a process and the on-disk token cache across
+// processes (every CLI invocation is a new process — without the disk cache
+// each one would exchange the key again). auth.json is never touched.
 func (m *Manager) tokenFromEnv(ctx context.Context, apiKey string, forceRefresh bool) (Token, error) {
 	if !forceRefresh && m.cachedTokenValid(m.envCache) {
 		return tokenFromCredentials(m.envCache), nil
+	}
+	cachePath := tokenCachePath(m.APIURL, apiKey)
+	if !forceRefresh {
+		if creds, ok := loadCachedToken(cachePath); ok && m.cachedTokenValid(creds) {
+			m.envCache = creds
+			return tokenFromCredentials(creds), nil
+		}
 	}
 
 	tok, err := m.exchange(ctx, apiKey)
@@ -205,6 +216,7 @@ func (m *Manager) tokenFromEnv(ctx context.Context, apiKey string, forceRefresh 
 		User:        tok.User,
 		APIURL:      m.APIURL,
 	}
+	_ = saveCachedToken(cachePath, m.envCache) // best effort
 	return tok, nil
 }
 

@@ -341,6 +341,7 @@ func setTestConfigDir(t *testing.T) string {
 	} else {
 		t.Setenv("XDG_CONFIG_HOME", dir)
 	}
+	setTestCacheDir(t) // keep the env-key token cache out of the real cache dir too
 	return filepath.Join(dir, "fmsg")
 }
 
@@ -353,4 +354,127 @@ func testJWTWithClaims(claims map[string]any) string {
 	payloadBytes, _ := json.Marshal(claims)
 	payload := base64.RawURLEncoding.EncodeToString(payloadBytes)
 	return header + "." + payload + ".signature"
+}
+
+// setTestCacheDir points the token cache at a temp dir.
+func setTestCacheDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if runtime.GOOS == "windows" {
+		t.Setenv("LocalAppData", dir)
+	} else {
+		t.Setenv("XDG_CACHE_HOME", dir)
+	}
+	return dir
+}
+
+func TestEnvAPIKeyTokenIsCachedAcrossProcesses(t *testing.T) {
+	setTestConfigDir(t)
+	cacheDir := setTestCacheDir(t)
+	t.Setenv("FMSG_API_KEY", "fmsgk_env_secret")
+
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	exchanges := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		exchanges++
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": testJWT("@env_bot@example.com"),
+			"token_type":   "Bearer",
+			"expires_at":   now.Add(12 * time.Hour).Format(time.RFC3339),
+		})
+	}))
+	defer srv.Close()
+
+	// Two separate Managers stand in for two CLI processes.
+	for i := 0; i < 2; i++ {
+		m := NewManager(srv.URL)
+		m.now = func() time.Time { return now }
+		if _, err := m.AccessToken(context.Background(), false); err != nil {
+			t.Fatalf("AccessToken #%d: %v", i, err)
+		}
+	}
+	if exchanges != 1 {
+		t.Fatalf("exchanges = %d, want 1 (second process should hit the disk cache)", exchanges)
+	}
+
+	// The cache holds the token, never the key, with 0600 perms; auth.json untouched.
+	files, _ := filepath.Glob(filepath.Join(cacheDir, "fmsg", "tokens", "*.json"))
+	if len(files) != 1 {
+		t.Fatalf("cache files = %v, want exactly one", files)
+	}
+	data, _ := os.ReadFile(files[0])
+	if strings.Contains(string(data), "fmsgk_env_secret") {
+		t.Fatalf("cache must not contain the API key: %s", data)
+	}
+	if info, _ := os.Stat(files[0]); runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+		t.Fatalf("cache perms = %o, want 0600", info.Mode().Perm())
+	}
+	if path, _ := storePath(); fileExists(path) {
+		t.Fatalf("env auth must not write auth.json")
+	}
+
+	// A different key or URL must not reuse the token.
+	t.Setenv("FMSG_API_KEY", "fmsgk_other")
+	m := NewManager(srv.URL)
+	m.now = func() time.Time { return now }
+	if _, err := m.AccessToken(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if exchanges != 2 {
+		t.Fatalf("exchanges = %d, want 2 for a different key", exchanges)
+	}
+
+	// Near expiry the cache is refreshed; a forced refresh always exchanges.
+	t.Setenv("FMSG_API_KEY", "fmsgk_env_secret")
+	m = NewManager(srv.URL)
+	m.now = func() time.Time { return now.Add(12*time.Hour - time.Minute) }
+	if _, err := m.AccessToken(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if exchanges != 3 {
+		t.Fatalf("exchanges = %d, want 3 near expiry", exchanges)
+	}
+	if _, err := m.AccessToken(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	if exchanges != 4 {
+		t.Fatalf("exchanges = %d, want 4 after forced refresh", exchanges)
+	}
+}
+
+func TestEnvAPIKeyTokenCacheCanBeDisabled(t *testing.T) {
+	setTestConfigDir(t)
+	cacheDir := setTestCacheDir(t)
+	t.Setenv("FMSG_API_KEY", "fmsgk_env_secret")
+	t.Setenv("FMSG_NO_TOKEN_CACHE", "1")
+
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	exchanges := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		exchanges++
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": testJWT("@env_bot@example.com"),
+			"token_type":   "Bearer",
+			"expires_at":   now.Add(12 * time.Hour).Format(time.RFC3339),
+		})
+	}))
+	defer srv.Close()
+	for i := 0; i < 2; i++ {
+		m := NewManager(srv.URL)
+		m.now = func() time.Time { return now }
+		if _, err := m.AccessToken(context.Background(), false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if exchanges != 2 {
+		t.Fatalf("exchanges = %d, want 2 with cache disabled", exchanges)
+	}
+	if files, _ := filepath.Glob(filepath.Join(cacheDir, "fmsg", "tokens", "*")); len(files) != 0 {
+		t.Fatalf("no cache files expected, got %v", files)
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

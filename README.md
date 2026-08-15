@@ -46,7 +46,7 @@ API keys are exchanged with `POST /fmsg/token` for short-lived first-party JWTs.
 
 Credentials are stored in `$XDG_CONFIG_HOME/fmsg/auth.json` (typically `~/.config/fmsg/auth.json`) with `0600` permissions.
 
-For non-interactive use, set `FMSG_API_KEY` instead of running `fmsg login`. Environment-provided API keys override stored credentials and are not written to disk.
+For non-interactive use, set `FMSG_API_KEY` instead of running `fmsg login`. Environment-provided API keys override stored credentials and are never written to disk. The short-lived JWT the key is exchanged for *is* cached — in `$XDG_CACHE_HOME/fmsg/tokens/` (typically `~/.cache/fmsg/tokens/`), `0600`, keyed by a hash of API URL + key — so successive invocations don't re-exchange the key on every call; it refreshes automatically near expiry. Set `FMSG_NO_TOKEN_CACHE=1` to disable the cache.
 
 ### Configuration
 
@@ -56,6 +56,7 @@ If a `.env` file exists in the working directory it is loaded automatically on s
 |---------------|--------------------------|---------------------------|
 | `FMSG_API_URL` | `http://127.0.0.1:8000` | Base URL of the fmsg-webapi |
 | `FMSG_API_KEY` | *(optional)* | Opaque API key used for non-interactive sub-account authentication |
+| `FMSG_NO_TOKEN_CACHE` | *(optional)* | Set to any value to disable the on-disk cache of the JWT exchanged for `FMSG_API_KEY` |
 
 Programmatic clients use API keys issued by fmsg-webapi.
 
