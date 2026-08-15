@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -26,7 +28,9 @@ var updateCmd = &cobra.Command{
   - A text string
   - "-" to read from stdin
   
-Only provided fields are updated; recipients in to are fully replaced.`,
+Only provided fields are updated; recipients in to are fully replaced.
+(The API's PUT replaces the whole draft, so the current draft is fetched
+and merged first — unchanged fields are preserved.)`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, manager := newAuthenticatedClient()
@@ -40,32 +44,56 @@ Only provided fields are updated; recipients in to are fully replaced.`,
 			return err
 		}
 
+		// The API's PUT replaces the whole draft: fetch the current state and
+		// merge, so fields the caller didn't provide are preserved rather
+		// than wiped.
+		idStr := strconv.FormatInt(msgID, 10)
+		existing, err := client.GetMessage(idStr)
+		if err != nil {
+			return fmt.Errorf("fetching current draft: %w", err)
+		}
+
 		msg := map[string]interface{}{
 			"from":    user,
 			"version": 1,
 		}
 
+		to := existing.To
 		if len(updateTo) > 0 {
-			msg["to"] = updateTo
+			to = updateTo
 		}
-		if cmd.Flags().Changed("topic") {
-			msg["topic"] = updateTopic
-		}
-		if cmd.Flags().Changed("type") {
-			msg["type"] = updateType
-		}
-		if cmd.Flags().Changed("pid") {
-			msg["pid"] = updatePID
-		}
-		if cmd.Flags().Changed("important") {
-			msg["important"] = updateImportant
-		}
-		if cmd.Flags().Changed("no-reply") {
-			msg["no_reply"] = updateNoReply
+		if len(to) > 0 {
+			msg["to"] = to
 		}
 
+		topic := existing.Topic
+		if cmd.Flags().Changed("topic") {
+			topic = updateTopic
+		}
+		if topic != "" {
+			msg["topic"] = topic
+		}
+
+		if cmd.Flags().Changed("pid") {
+			msg["pid"] = updatePID
+		} else if existing.PID != nil {
+			msg["pid"] = *existing.PID
+		}
+
+		important := existing.Important
+		if cmd.Flags().Changed("important") {
+			important = updateImportant
+		}
+		msg["important"] = important
+
+		noReply := existing.NoReply
+		if cmd.Flags().Changed("no-reply") {
+			noReply = updateNoReply
+		}
+		msg["no_reply"] = noReply
+
+		var data []byte
 		if len(args) == 2 {
-			var data []byte
 			content := args[1]
 			switch content {
 			case "-":
@@ -80,11 +108,25 @@ Only provided fields are updated; recipients in to are fully replaced.`,
 					data = []byte(content)
 				}
 			}
-			msg["data"] = string(data)
-			msg["size"] = len(data)
-			if !cmd.Flags().Changed("type") {
-				msg["type"] = "text/plain"
+		} else if existing.Size > 0 {
+			var buf bytes.Buffer
+			if err := client.DownloadDataToWriter(idStr, &buf); err != nil {
+				return fmt.Errorf("fetching current draft body: %w", err)
 			}
+			data = buf.Bytes()
+		}
+		msg["data"] = string(data)
+		msg["size"] = len(data)
+
+		typ := existing.Type
+		if cmd.Flags().Changed("type") {
+			typ = updateType
+		}
+		if typ == "" && len(args) == 2 {
+			typ = "text/plain"
+		}
+		if typ != "" {
+			msg["type"] = typ
 		}
 
 		payload, err := json.Marshal(msg)
