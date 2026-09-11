@@ -54,7 +54,7 @@ var sendCmd = &cobra.Command{
 		}
 
 		// Build a draft payload.
-		msg := map[string]interface{}{
+		msg := map[string]any{
 			"from":    user,
 			"to":      []string{recipient},
 			"version": 1,

@@ -53,7 +53,7 @@ and merged first — unchanged fields are preserved.)`,
 			return fmt.Errorf("fetching current draft: %w", err)
 		}
 
-		msg := map[string]interface{}{
+		msg := map[string]any{
 			"from":    user,
 			"version": 1,
 		}

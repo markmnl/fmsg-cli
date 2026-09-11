@@ -392,7 +392,7 @@ func (c *Client) SendMessage(id int64) (*SendMessageResponse, error) {
 
 // AddRecipients adds additional recipients to an existing message.
 func (c *Client) AddRecipients(id int64, addTo []string) (*AddRecipientsResponse, error) {
-	body, err := json.Marshal(map[string]interface{}{"add_to": addTo})
+	body, err := json.Marshal(map[string]any{"add_to": addTo})
 	if err != nil {
 		return nil, fmt.Errorf("encoding request: %w", err)
 	}
@@ -644,7 +644,7 @@ func (c *Client) GetSubAccount(agent string) (*SubAccount, error) {
 
 // CreateSubAccount derives a new sub-account and returns its plaintext API key.
 func (c *Client) CreateSubAccount(agent string, allowedCIDRs []string, keyExpiresAt string) (*SubAccount, error) {
-	payload, err := json.Marshal(map[string]interface{}{
+	payload, err := json.Marshal(map[string]any{
 		"agent":          agent,
 		"allowed_cidrs":  allowedCIDRs,
 		"key_expires_at": keyExpiresAt,
@@ -678,7 +678,7 @@ func (c *Client) CreateSubAccount(agent string, allowedCIDRs []string, keyExpire
 
 // UpdateSubAccountCIDRs replaces a sub-account's allowed CIDRs without rotating its key.
 func (c *Client) UpdateSubAccountCIDRs(agent string, allowedCIDRs []string) (*SubAccount, error) {
-	payload, err := json.Marshal(map[string]interface{}{
+	payload, err := json.Marshal(map[string]any{
 		"allowed_cidrs": allowedCIDRs,
 	})
 	if err != nil {
@@ -710,7 +710,7 @@ func (c *Client) UpdateSubAccountCIDRs(agent string, allowedCIDRs []string) (*Su
 
 // RotateSubAccountKey rotates a sub-account's API key and returns the new plaintext key.
 func (c *Client) RotateSubAccountKey(agent, keyExpiresAt string) (*SubAccount, error) {
-	payload, err := json.Marshal(map[string]interface{}{
+	payload, err := json.Marshal(map[string]any{
 		"key_expires_at": keyExpiresAt,
 	})
 	if err != nil {

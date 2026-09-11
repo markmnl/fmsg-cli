@@ -183,7 +183,7 @@ func splitCIDRs(raw string) []string {
 		return nil
 	}
 	var out []string
-	for _, c := range strings.Split(raw, ",") {
+	for c := range strings.SplitSeq(raw, ",") {
 		c = strings.TrimSpace(c)
 		if c != "" {
 			out = append(out, c)
