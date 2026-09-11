@@ -55,7 +55,7 @@ var draftCreateCmd = &cobra.Command{
 			}
 		}
 
-		msg := map[string]interface{}{
+		msg := map[string]any{
 			"from":    user,
 			"to":      []string{recipient},
 			"version": 1,

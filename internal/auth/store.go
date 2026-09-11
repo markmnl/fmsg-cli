@@ -16,7 +16,7 @@ type Credentials struct {
 	APIKey      string    `json:"api_key,omitempty"`
 	AccessToken string    `json:"access_token,omitempty"`
 	TokenType   string    `json:"token_type,omitempty"`
-	ExpiresAt   time.Time `json:"expires_at,omitempty"`
+	ExpiresAt   time.Time `json:"expires_at"`
 	User        string    `json:"user,omitempty"`
 	APIURL      string    `json:"api_url,omitempty"`
 }

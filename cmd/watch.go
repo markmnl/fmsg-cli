@@ -62,7 +62,7 @@ Exit codes: 0 after an event (--once) or when stopped by Ctrl-C/--timeout;
 
 		wanted := map[string]bool{}
 		for _, e := range watchEvents {
-			for _, part := range strings.Split(e, ",") {
+			for part := range strings.SplitSeq(e, ",") {
 				if part = strings.TrimSpace(part); part != "" {
 					wanted[part] = true
 				}

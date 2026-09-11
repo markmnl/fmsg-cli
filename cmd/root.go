@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"unicode"
 
 	"github.com/spf13/cobra"
@@ -28,7 +29,7 @@ Before using any command, authenticate with:
 var jsonOutput bool
 
 // printJSON writes v to stdout as a single line of JSON.
-func printJSON(v interface{}) error {
+func printJSON(v any) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetEscapeHTML(false)
 	return enc.Encode(v)
@@ -40,10 +41,8 @@ func printJSON(v interface{}) error {
 // misinterpreting the leading dash as a shorthand flag.  If "--" is already
 // present in os.Args the function is a no-op.
 func injectDashDash() {
-	for _, arg := range os.Args[1:] {
-		if arg == "--" {
-			return // user already supplied the separator
-		}
+	if slices.Contains(os.Args[1:], "--") {
+		return // user already supplied the separator
 	}
 	for i, arg := range os.Args[1:] {
 		if len(arg) >= 2 && arg[0] == '-' && unicode.IsDigit(rune(arg[1])) {

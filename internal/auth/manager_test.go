@@ -386,7 +386,7 @@ func TestEnvAPIKeyTokenIsCachedAcrossProcesses(t *testing.T) {
 	defer srv.Close()
 
 	// Two separate Managers stand in for two CLI processes.
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		m := NewManager(srv.URL)
 		m.now = func() time.Time { return now }
 		if _, err := m.AccessToken(context.Background(), false); err != nil {
@@ -459,7 +459,7 @@ func TestEnvAPIKeyTokenCacheCanBeDisabled(t *testing.T) {
 		})
 	}))
 	defer srv.Close()
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		m := NewManager(srv.URL)
 		m.now = func() time.Time { return now }
 		if _, err := m.AccessToken(context.Background(), false); err != nil {
