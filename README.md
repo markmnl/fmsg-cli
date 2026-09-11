@@ -1,10 +1,13 @@
+[![Build & Test](https://github.com/markmnl/fmsg-cli/actions/workflows/build-test.yml/badge.svg?branch=main)](https://github.com/markmnl/fmsg-cli/actions/workflows/build-test.yml?query=branch%3Amain)
+[![Go 1.27+](https://img.shields.io/badge/Go-1.27%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/dl/)
+
 # fmsg-cli
 
 Command-line interface to [fmsg-webapi](https://github.com/markmnl/fmsg-webapi) fronting a fmsgd instance.
 
 ## Requirements
 
-- Go 1.24 or newer
+- Go 1.27 or newer
 
 ## Build
 
