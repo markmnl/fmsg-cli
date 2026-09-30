@@ -5,11 +5,26 @@
 
 Command-line interface to [fmsg-webapi](https://github.com/markmnl/fmsg-webapi) fronting a fmsgd instance.
 
-## Requirements
+## Install
 
-- Go 1.27 or newer
+Download the `fmsg` binary for your platform from the
+[latest release](https://github.com/markmnl/fmsg-cli/releases/latest), e.g. on
+Linux (x86-64):
 
-## Build
+```sh
+curl -fsSL https://github.com/markmnl/fmsg-cli/releases/latest/download/fmsg_linux_amd64.tar.gz | tar -xz fmsg
+sudo mv fmsg /usr/local/bin/
+fmsg --version
+```
+
+Archives are named `fmsg_<os>_<arch>` for `linux`, `darwin` (macOS) and
+`windows` (a `.zip`), on `amd64` and `arm64`; `checksums.txt` has their
+SHA-256 sums. Publishing a GitHub release builds and attaches them
+(`.github/workflows/release.yml`).
+
+## Build from source
+
+Requires Go 1.27 or newer.
 
 ```sh
 go build -o fmsg
