@@ -6,15 +6,33 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"slices"
 	"unicode"
 
 	"github.com/spf13/cobra"
 )
 
+// version is set by release builds with
+// -ldflags "-X github.com/markmnl/fmsg-cli/cmd.version=v1.2.3".
+var version = ""
+
+// buildVersion reports the release version, falling back to the module
+// version recorded by `go install ...@version`, then "dev".
+func buildVersion() string {
+	if version != "" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "dev"
+}
+
 var rootCmd = &cobra.Command{
-	Use:   "fmsg",
-	Short: "fmsg — command-line interface to an fmsg messaging server",
+	Use:     "fmsg",
+	Version: buildVersion(),
+	Short:   "fmsg — command-line interface to an fmsg messaging server",
 	Long: `fmsg is a CLI that communicates with an fmsg-webapi server.
 
 Before using any command, authenticate with:
