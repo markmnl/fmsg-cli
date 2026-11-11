@@ -18,6 +18,7 @@ const (
 	EventNewMsg          = "new_msg"
 	EventDelivered       = "delivered"
 	EventRecipientsAdded = "recipients_added"
+	EventEdit            = "edit"
 )
 
 // WatchEvent is one frame from the WebSocket: a type discriminator and the

@@ -43,15 +43,30 @@ var getCmd = &cobra.Command{
 			}
 		}
 		if msg.PID != nil {
-			fmt.Printf("PID:  %d\n", *msg.PID)
+			if msg.Edit {
+				fmt.Printf("Edit of: %d\n", *msg.PID)
+			} else {
+				fmt.Printf("PID:  %d\n", *msg.PID)
+			}
 		}
 		if msg.Topic != "" {
 			fmt.Printf("Topic: %s\n", msg.Topic)
 		}
 		fmt.Printf("Type: %s\n", msg.Type)
-		fmt.Printf("Size: %d\n", msg.Size)
+		size := msg.Size
+		if msg.Edited != nil && msg.Edited.Size != nil {
+			size = *msg.Edited.Size
+		}
+		fmt.Printf("Size: %d\n", size)
 		if msg.Time != nil {
 			fmt.Printf("Time: %f\n", *msg.Time)
+		}
+		if msg.Edited != nil {
+			if msg.Edited.Size != nil {
+				fmt.Printf("Edited: %f (edit message %d)\n", msg.Edited.Time, msg.Edited.ID)
+			} else {
+				fmt.Printf("Edited: %f (edit message %d could not be applied; showing the original)\n", msg.Edited.Time, msg.Edited.ID)
+			}
 		}
 		if msg.Important {
 			fmt.Println("Important: yes")

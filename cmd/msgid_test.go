@@ -188,3 +188,59 @@ func TestInjectDashDash_FlagBeforeNegative(t *testing.T) {
 		}
 	}
 }
+
+// TestResolveMessageID_SkipsEditMessages pins that negative indices count the
+// messages "list" shows: edit messages (FMSG-008) are passed over.
+func TestResolveMessageID_SkipsEditMessages(t *testing.T) {
+	pid := int64(50)
+	items := []api.MessageListItem{
+		{ID: 100, Edit: true, PID: &pid},
+		{ID: 90},
+		{ID: 80, Edit: true, PID: &pid},
+		{ID: 50},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		page := items
+		if offset >= len(page) {
+			page = nil
+		} else {
+			page = page[offset:]
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(page)
+	}))
+	defer srv.Close()
+	client := api.New(srv.URL, api.StaticTokenProvider("token"))
+
+	for arg, want := range map[string]int64{"-1": 90, "-2": 50} {
+		id, err := resolveMessageID(client, arg)
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", arg, err)
+		}
+		if id != want {
+			t.Fatalf("%s: want %d, got %d", arg, want, id)
+		}
+	}
+	if _, err := resolveMessageID(client, "-3"); err == nil {
+		t.Fatal("-3: want an error, only two messages are visible")
+	}
+}
+
+func TestListLineMarksEditsAndEditedMessages(t *testing.T) {
+	pid := int64(7)
+	size := 5
+	cases := []struct {
+		msg  api.MessageListItem
+		want string
+	}{
+		{api.MessageListItem{ID: 7, From: "@a@example.com"}, `ID: 7  From: @a@example.com  To: []`},
+		{api.MessageListItem{ID: 7, From: "@a@example.com", Edited: &api.Edited{ID: 9, Time: 1, Size: &size}}, `ID: 7  From: @a@example.com  To: []  (edited)`},
+		{api.MessageListItem{ID: 9, From: "@a@example.com", Edit: true, PID: &pid}, `ID: 9  From: @a@example.com  To: []  (edit of 7)`},
+	}
+	for _, c := range cases {
+		if got := listLine(c.msg, "[]"); got != c.want {
+			t.Errorf("listLine = %q, want %q", got, c.want)
+		}
+	}
+}

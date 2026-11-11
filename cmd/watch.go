@@ -36,8 +36,10 @@ var watchCmd = &cobra.Command{
 arrives, until interrupted (Ctrl-C), --once, or --timeout.
 
 Events pushed by the server: new_msg (a message arrived for you), delivered
-(a message you sent reached a recipient), recipients_added. Filter with
---events; every event carries the message in the same shape as a "list" item.
+(a message you sent reached a recipient), recipients_added, edit (a message
+was edited or an edit reverted; the event carries the message as it now
+reads). Filter with --events; every event carries the message in the same
+shape as a "list" item.
 
 With --json each event is one JSON line: {"type":"new_msg","data":{...}}.
 A {"type":"ready"} line is printed once the socket is open — and again after
@@ -125,11 +127,14 @@ func printHumanEvent(ev api.WatchEvent) {
 	if item.Topic != "" {
 		line += fmt.Sprintf("  Topic: %q", item.Topic)
 	}
+	if ev.Type == api.EventEdit && item.Edited == nil {
+		line += "  (reverted)"
+	}
 	fmt.Println(line)
 }
 
 func init() {
-	watchCmd.Flags().StringSliceVar(&watchEvents, "events", nil, "Only print these event types (comma-separated: new_msg,delivered,recipients_added); default all")
+	watchCmd.Flags().StringSliceVar(&watchEvents, "events", nil, "Only print these event types (comma-separated: new_msg,delivered,recipients_added,edit); default all")
 	watchCmd.Flags().BoolVar(&watchOnce, "once", false, "Exit after the first matching event")
 	watchCmd.Flags().DurationVar(&watchTimeout, "timeout", 0, "Stop after this duration (e.g. 30s, 5m); 0 means run until interrupted")
 	rootCmd.AddCommand(watchCmd)

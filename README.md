@@ -84,9 +84,9 @@ Programmatic clients use API keys issued by fmsg-webapi.
 |---------|-------------|
 | `fmsg login [api-key\|jwt] [--address @user@example.com]` | Authenticate and store credentials |
 | `fmsg whoami` | Print the authenticated fmsg address, API URL, and token expiry |
-| `fmsg list` \| `fmsg ls [--limit N] [--offset N]` | List messages for the authenticated user |
-| `fmsg sent [--limit N] [--offset N]` | List messages authored by the authenticated user |
-| `fmsg watch [--events types] [--once] [--timeout D]` | Stream pushed events (new messages, deliveries) over the server's WebSocket until Ctrl-C |
+| `fmsg list` \| `fmsg ls [--limit N] [--offset N] [--all]` | List messages for the authenticated user; edit messages are hidden unless `--all` |
+| `fmsg sent [--limit N] [--offset N] [--all]` | List messages authored by the authenticated user; edit messages are hidden unless `--all` |
+| `fmsg watch [--events types] [--once] [--timeout D]` | Stream pushed events (new messages, deliveries, edits) over the server's WebSocket until Ctrl-C |
 | `fmsg get <message-id>` | Retrieve a message by ID, including the short text body for `text/*` messages |
 | `fmsg send <recipient> <file\|text\|->` | Send a message (file path, text, or `-` for stdin) |
 | `fmsg draft create <recipient> <file\|text\|->` | Create a draft message without sending |
@@ -97,7 +97,7 @@ Programmatic clients use API keys issued by fmsg-webapi.
 | `fmsg edit <message-id> <file\|text\|->` | Replace the body of a message you sent (FMSG-008 edit); `fmsg edit <message-id> --revert` restores the original |
 | `fmsg attach <message-id> <file>` | Upload a file attachment to a message |
 | `fmsg get-attach <message-id> <filename> <output-file>` | Download an attachment |
-| `fmsg get-data <message-id> [output-file]` | Download message body data (stdout if no output file) |
+| `fmsg get-data <message-id> [output-file] [--original]` | Download message body data (stdout if no output file); an edited message downloads as edited unless `--original` |
 | `fmsg rm-attach <message-id> <filename>` | Remove an attachment from a message |
 | `fmsg sub-accounts list` | List sub-accounts owned by the authenticated user |
 | `fmsg sub-accounts get <agent>` | Retrieve a single sub-account grant |
@@ -150,7 +150,7 @@ callers:
   preceded by `{"type":"ready"}` once the socket is open (and again after
   every automatic reconnect, since events may have been missed while it was
   down: do a `list` catch-up when you see it). Filter with `--events
-  new_msg,delivered,recipients_added`; `--once` exits after the first
+  new_msg,delivered,recipients_added,edit`; `--once` exits after the first
   matching event; `--timeout 30s` stops after that long. Exit code 0 after an
   event or Ctrl-C, **2** if `--once`/`--timeout` ended before any event, 1 on
   error.
@@ -226,6 +226,11 @@ fmsg add-to 101 @cc1@example.com @cc2@example.com
 fmsg edit 101 "See you there at 5pm"
 fmsg edit 101 --revert
 
+# An edited message shows "(edited)" in list/sent and an "Edited:" line in
+# get; the edit messages themselves are hidden unless --all is given, and
+# negative indices (-1, -2, ...) do not count them
+fmsg list --all
+
 # Update a draft message
 fmsg update 42 --topic "New topic"
 fmsg update 42 --to @newrecipient@example.com "Updated body text"
@@ -243,6 +248,7 @@ fmsg get-attach 101 report.pdf ./downloaded-report.pdf
 # Download message body data
 fmsg get-data 101
 fmsg get-data 101 ./message-body.txt
+fmsg get-data 101 --original                # as first sent, ignoring any edit
 
 # Remove attachment
 fmsg rm-attach 101 report.pdf

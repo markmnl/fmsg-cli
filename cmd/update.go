@@ -110,7 +110,7 @@ and merged first — unchanged fields are preserved.)`,
 			}
 		} else if existing.Size > 0 {
 			var buf bytes.Buffer
-			if err := client.DownloadDataToWriter(idStr, &buf); err != nil {
+			if err := client.DownloadDataToWriter(idStr, false, &buf); err != nil {
 				return fmt.Errorf("fetching current draft body: %w", err)
 			}
 			data = buf.Bytes()
