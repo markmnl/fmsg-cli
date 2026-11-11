@@ -175,6 +175,30 @@ type MessageListItem struct {
 	Read        bool                `json:"read"`
 	TimeRead    *float64            `json:"time_read"`
 	Attachments []Attachment        `json:"attachments"`
+	Edit        bool                `json:"edit"`
+	Edited      *Edited             `json:"edited"`
+}
+
+// Edited identifies the edit message in force on a message (FMSG-008). Size
+// is the byte length of the edited data, nil when the edit could not be
+// applied and the original data is shown instead.
+type Edited struct {
+	ID   int64   `json:"id"`
+	Time float64 `json:"time"`
+	Size *int    `json:"size"`
+}
+
+// VisibleMessages drops edit messages (FMSG-008) from items. They carry a
+// change to another message, which the server already applies to that
+// message, so they are not shown as messages in their own right.
+func VisibleMessages(items []MessageListItem) []MessageListItem {
+	visible := make([]MessageListItem, 0, len(items))
+	for _, item := range items {
+		if !item.Edit {
+			visible = append(visible, item)
+		}
+	}
+	return visible
 }
 
 // Message represents a fmsg message as exchanged over the HTTP API.
@@ -198,6 +222,8 @@ type Message struct {
 	Read        bool                `json:"read"`
 	TimeRead    *float64            `json:"time_read"`
 	Attachments []Attachment        `json:"attachments"`
+	Edit        bool                `json:"edit"`
+	Edited      *Edited             `json:"edited"`
 }
 
 // CreateMessageResponse is the response from creating a message.
@@ -600,8 +626,13 @@ func (c *Client) UpdateMessage(id int64, body []byte) error {
 }
 
 // DownloadDataToWriter downloads the message body data and writes it to w.
-func (c *Client) DownloadDataToWriter(id string, w io.Writer) error {
-	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/fmsg/"+id+"/data", nil)
+// An edited message (FMSG-008) downloads as edited unless original is set.
+func (c *Client) DownloadDataToWriter(id string, original bool, w io.Writer) error {
+	url := c.BaseURL + "/fmsg/" + id + "/data"
+	if original {
+		url += "?original=true"
+	}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
@@ -623,14 +654,14 @@ func (c *Client) DownloadDataToWriter(id string, w io.Writer) error {
 }
 
 // DownloadData downloads the message body data and writes it to outputPath.
-func (c *Client) DownloadData(id, outputPath string) error {
+func (c *Client) DownloadData(id string, original bool, outputPath string) error {
 	out, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("creating output file: %w", err)
 	}
 	defer out.Close()
 
-	if err := c.DownloadDataToWriter(id, out); err != nil {
+	if err := c.DownloadDataToWriter(id, original, out); err != nil {
 		return err
 	}
 	return nil

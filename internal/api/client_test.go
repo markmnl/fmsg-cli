@@ -198,3 +198,60 @@ func TestEditMessageSendsDataAndReportsWhetherSent(t *testing.T) {
 		t.Fatalf("request bodies = %q", bodies)
 	}
 }
+
+// TestEditFieldsDecodeAndEditMessagesAreHidden pins the FMSG-008 fields on
+// list items and that VisibleMessages drops the edit messages themselves.
+func TestEditFieldsDecodeAndEditMessagesAreHidden(t *testing.T) {
+	const body = `[
+		{"id": 9, "has_pid": true, "pid": 7, "from": "@alice@example.com", "edit": true, "edited": null},
+		{"id": 8, "from": "@bob@example.com", "edit": false, "edited": {"id": 12, "time": 3.5, "size": null}},
+		{"id": 7, "from": "@alice@example.com", "edit": false, "edited": {"id": 9, "time": 2.5, "size": 5}}
+	]`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, StaticTokenProvider("token"))
+	items, err := client.ListMessages(20, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(items) != 3 || !items[0].Edit {
+		t.Fatalf("items = %+v", items)
+	}
+	if e := items[1].Edited; e == nil || e.ID != 12 || e.Size != nil {
+		t.Fatalf("unappliable edit = %+v", e)
+	}
+	if e := items[2].Edited; e == nil || e.ID != 9 || e.Time != 2.5 || e.Size == nil || *e.Size != 5 {
+		t.Fatalf("edited = %+v", e)
+	}
+
+	visible := VisibleMessages(items)
+	if len(visible) != 2 || visible[0].ID != 8 || visible[1].ID != 7 {
+		t.Fatalf("visible = %+v", visible)
+	}
+}
+
+func TestDownloadDataRequestsTheOriginalOnlyWhenAsked(t *testing.T) {
+	var queries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/fmsg/7/data" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		queries = append(queries, r.URL.RawQuery)
+		_, _ = w.Write([]byte("body"))
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, StaticTokenProvider("token"))
+	for _, original := range []bool{false, true} {
+		if err := client.DownloadDataToWriter("7", original, io.Discard); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(queries) != 2 || queries[0] != "" || queries[1] != "original=true" {
+		t.Fatalf("queries = %q", queries)
+	}
+}
