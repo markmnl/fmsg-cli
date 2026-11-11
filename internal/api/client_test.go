@@ -159,3 +159,42 @@ func TestUploadAttachmentReturnsServerResponse(t *testing.T) {
 		t.Fatalf("upload response: got %+v", result)
 	}
 }
+
+func TestEditMessageSendsDataAndReportsWhetherSent(t *testing.T) {
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/fmsg/7/edit" || r.Method != http.MethodPost {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		body, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(body))
+		w.Header().Set("Content-Type", "application/json")
+		if len(bodies) == 1 {
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":9,"time":12.5,"sha256":"ab"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":null,"time":null,"sha256":null}`))
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, &sequenceTokenProvider{})
+	text := "fixed"
+	edited, err := client.EditMessage(7, &text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !edited.Sent || edited.ID == nil || *edited.ID != 9 {
+		t.Fatalf("edit result = %+v", edited)
+	}
+	reverted, err := client.EditMessage(7, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reverted.Sent || reverted.ID != nil {
+		t.Fatalf("no-op revert result = %+v", reverted)
+	}
+	if bodies[0] != `{"data":"fixed"}` || bodies[1] != `{"data":null}` {
+		t.Fatalf("request bodies = %q", bodies)
+	}
+}

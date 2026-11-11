@@ -94,6 +94,7 @@ Programmatic clients use API keys issued by fmsg-webapi.
 | `fmsg update <message-id> [file\|text\|-]` | Update a draft message |
 | `fmsg del <message-id>` | Delete a draft message by ID |
 | `fmsg add-to <message-id> <recipient> [recipient...]` | Add additional recipients to a message |
+| `fmsg edit <message-id> <file\|text\|->` | Replace the body of a message you sent (FMSG-008 edit); `fmsg edit <message-id> --revert` restores the original |
 | `fmsg attach <message-id> <file>` | Upload a file attachment to a message |
 | `fmsg get-attach <message-id> <filename> <output-file>` | Download an attachment |
 | `fmsg get-data <message-id> [output-file]` | Download message body data (stdout if no output file) |
@@ -220,6 +221,10 @@ fmsg draft send 42
 # Add additional recipients to a message
 fmsg add-to 101 @other@example.com
 fmsg add-to 101 @cc1@example.com @cc2@example.com
+
+# Edit a message you already sent, then revert it
+fmsg edit 101 "See you there at 5pm"
+fmsg edit 101 --revert
 
 # Update a draft message
 fmsg update 42 --topic "New topic"

@@ -420,6 +420,48 @@ func (c *Client) AddRecipients(id int64, addTo []string) (*AddRecipientsResponse
 	return &result, nil
 }
 
+// EditMessageResponse identifies the edit message in force on a message after
+// an edit call; ID, Time and SHA256 are nil when the message has none. Sent is
+// false when the body already read that way and nothing was sent.
+type EditMessageResponse struct {
+	ID     *int64   `json:"id"`
+	Time   *float64 `json:"time"`
+	SHA256 *string  `json:"sha256"`
+	Sent   bool     `json:"sent"`
+}
+
+// EditMessage replaces the body of a sent message the caller authored
+// (FMSG-008), or reverts it to the original when data is nil.
+func (c *Client) EditMessage(id int64, data *string) (*EditMessageResponse, error) {
+	body, err := json.Marshal(map[string]any{"data": data})
+	if err != nil {
+		return nil, fmt.Errorf("encoding request: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/fmsg/"+strconv.FormatInt(id, 10)+"/edit", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := checkStatus(resp); err != nil {
+		return nil, err
+	}
+
+	var result EditMessageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	result.Sent = resp.StatusCode == http.StatusCreated
+	return &result, nil
+}
+
 // DeleteMessage deletes a message by ID.
 func (c *Client) DeleteMessage(id int64) error {
 	req, err := http.NewRequest(http.MethodDelete, c.BaseURL+"/fmsg/"+strconv.FormatInt(id, 10), nil)
