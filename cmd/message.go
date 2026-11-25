@@ -1,11 +1,36 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 )
+
+// awaitContext runs fn and returns its result, or ctx's error if ctx is
+// cancelled first. It exists for blocking reads that cannot be interrupted
+// (stdin, a named pipe with no writer yet): Execute routes SIGINT/SIGTERM into
+// the command context, so a read that ignored it would make the command deaf
+// to Ctrl-C. An abandoned fn keeps running until the process exits.
+func awaitContext[T any](ctx context.Context, fn func() (T, error)) (T, error) {
+	type result struct {
+		value T
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		value, err := fn()
+		done <- result{value, err}
+	}()
+	select {
+	case r := <-done:
+		return r.value, r.err
+	case <-ctx.Done():
+		var zero T
+		return zero, ctx.Err()
+	}
+}
 
 // readMessageContent resolves a CLI message content argument:
 //   - "-" reads all bytes from stdin.
@@ -13,22 +38,26 @@ import (
 //     process substitution, etc.) is read; read errors are returned rather
 //     than silently falling back to the path as literal text.
 //   - Anything else is used directly as literal text.
-func readMessageContent(arg string) ([]byte, error) {
-	if arg == "-" {
-		data, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return nil, fmt.Errorf("reading stdin: %w", err)
+//
+// The read is abandoned with ctx's error when ctx is cancelled.
+func readMessageContent(ctx context.Context, arg string) ([]byte, error) {
+	return awaitContext(ctx, func() ([]byte, error) {
+		if arg == "-" {
+			data, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return nil, fmt.Errorf("reading stdin: %w", err)
+			}
+			return data, nil
 		}
-		return data, nil
-	}
-	if info, err := os.Stat(arg); err == nil && !info.IsDir() {
-		data, err := os.ReadFile(arg)
-		if err != nil {
-			return nil, fmt.Errorf("reading file %q: %w", arg, err)
+		if info, err := os.Stat(arg); err == nil && !info.IsDir() {
+			data, err := os.ReadFile(arg)
+			if err != nil {
+				return nil, fmt.Errorf("reading file %q: %w", arg, err)
+			}
+			return data, nil
 		}
-		return data, nil
-	}
-	return []byte(arg), nil
+		return []byte(arg), nil
+	})
 }
 
 type draftOptions struct {

@@ -30,7 +30,7 @@ and visible to them. Drafts are changed with "fmsg update" instead.`,
 
 		var data *string
 		if !editRevert {
-			raw, err := readMessageContent(args[1])
+			raw, err := readMessageContent(cmd.Context(), args[1])
 			if err != nil {
 				return err
 			}

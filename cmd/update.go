@@ -93,7 +93,7 @@ and merged first — unchanged fields are preserved.)`,
 
 		var data []byte
 		if len(args) == 2 {
-			data, err = readMessageContent(args[1])
+			data, err = readMessageContent(cmd.Context(), args[1])
 			if err != nil {
 				return err
 			}

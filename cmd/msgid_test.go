@@ -310,20 +310,20 @@ func TestReadMessageContent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := readMessageContent(file)
+	got, err := readMessageContent(context.Background(), file)
 	if err != nil || string(got) != "from file" {
-		t.Fatalf("readMessageContent(file) = %q, %v", string(got), err)
+		t.Fatalf("readMessageContent(context.Background(), file) = %q, %v", string(got), err)
 	}
 
-	got, err = readMessageContent("literal text message")
+	got, err = readMessageContent(context.Background(), "literal text message")
 	if err != nil || string(got) != "literal text message" {
 		t.Fatalf("readMessageContent(literal) = %q, %v", string(got), err)
 	}
 
 	// Directory falls back to literal text.
-	got, err = readMessageContent(dir)
+	got, err = readMessageContent(context.Background(), dir)
 	if err != nil || string(got) != dir {
-		t.Fatalf("readMessageContent(dir) = %q, %v", string(got), err)
+		t.Fatalf("readMessageContent(context.Background(), dir) = %q, %v", string(got), err)
 	}
 
 	// Existing unreadable regular file must return an error instead of falling back.
@@ -337,7 +337,7 @@ func TestReadMessageContent(t *testing.T) {
 		}
 		t.Cleanup(func() { _ = os.Chmod(unreadable, 0600) })
 
-		if _, err := readMessageContent(unreadable); err == nil {
+		if _, err := readMessageContent(context.Background(), unreadable); err == nil {
 			t.Fatal("expected explicit error for unreadable existing regular file")
 		}
 	}

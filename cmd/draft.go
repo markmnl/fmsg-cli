@@ -36,7 +36,7 @@ var draftCreateCmd = &cobra.Command{
 		}
 
 		recipient := args[0]
-		data, err := readMessageContent(args[1])
+		data, err := readMessageContent(cmd.Context(), args[1])
 		if err != nil {
 			return err
 		}
