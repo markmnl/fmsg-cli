@@ -59,33 +59,11 @@ func saveCachedToken(path string, creds Credentials) error {
 		return errors.New("token cache disabled")
 	}
 	creds.APIKey = "" // never persist the key itself
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
 	data, err := json.Marshal(creds)
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".tok-*")
-	if err != nil {
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := tmp.Chmod(0600); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		os.Remove(tmp.Name())
+	if err := writeFileAtomic(path, data, 0600); err != nil {
 		return fmt.Errorf("installing token cache: %w", err)
 	}
 	return nil

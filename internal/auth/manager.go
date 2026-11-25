@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -15,10 +17,12 @@ import (
 )
 
 const (
-	credentialsVersion = 2
-	refreshBefore      = 5 * time.Minute
-	authTypeAPIKey     = "api_key"
-	authTypeJWT        = "jwt"
+	credentialsVersion    = 2
+	refreshBefore         = 5 * time.Minute
+	authTypeAPIKey        = "api_key"
+	authTypeJWT           = "jwt"
+	defaultRequestTimeout = 30 * time.Second
+	maxErrorBodyBytes     = 64 << 10
 )
 
 // Token is a short-lived access token returned by fmsg-webapi.
@@ -34,18 +38,37 @@ type Manager struct {
 	APIURL string
 	HTTP   *http.Client
 
-	mu       sync.Mutex
-	envCache Credentials
-	now      func() time.Time
+	mu              sync.Mutex
+	envCache        Credentials
+	now             func() time.Time
+	defaultHTTPOnce sync.Once
+	defaultHTTP     *http.Client
 }
 
 // NewManager returns a Manager for the configured fmsg-webapi base URL.
+// Manager.HTTP is left nil so callers can attach a shared transport without
+// allocating a throwaway one; if unset, a default client with timeouts is
+// lazily initialized on first use.
 func NewManager(apiURL string) *Manager {
 	return &Manager{
 		APIURL: strings.TrimRight(apiURL, "/"),
-		HTTP:   &http.Client{},
 		now:    time.Now,
 	}
+}
+
+func (m *Manager) httpClient() *http.Client {
+	if m.HTTP != nil {
+		return m.HTTP
+	}
+	m.defaultHTTPOnce.Do(func() {
+		t := http.DefaultTransport.(*http.Transport).Clone()
+		t.ResponseHeaderTimeout = defaultRequestTimeout
+		m.defaultHTTP = &http.Client{
+			Transport: t,
+			Timeout:   defaultRequestTimeout,
+		}
+	})
+	return m.defaultHTTP
 }
 
 // AccessToken returns a valid access token. If forceRefresh is true, the API key
@@ -69,7 +92,10 @@ func (m *Manager) Token(ctx context.Context, forceRefresh bool) (Token, error) {
 
 	creds, err := Load()
 	if err != nil {
-		return Token{}, fmt.Errorf("missing credentials; run fmsg login with an API key or user JWT, or set FMSG_API_KEY")
+		if errors.Is(err, os.ErrNotExist) {
+			return Token{}, fmt.Errorf("missing credentials; run fmsg login with an API key or user JWT, or set FMSG_API_KEY")
+		}
+		return Token{}, fmt.Errorf("loading credentials: %w", err)
 	}
 	if strings.TrimSpace(creds.APIKey) == "" {
 		return m.tokenFromStoredJWT(creds, forceRefresh)
@@ -250,21 +276,20 @@ func (m *Manager) exchange(ctx context.Context, apiKey string) (Token, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client := m.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
+	resp, err := m.httpClient().Do(req)
 	if err != nil {
 		return Token{}, fmt.Errorf("exchanging API key: network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxErrorBodyBytes))
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return Token{}, fmt.Errorf("API key was rejected; it may be invalid, expired, revoked, CIDR-blocked, or its sub-account may be unavailable")
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		msg := strings.TrimSpace(string(body))
 		if msg == "" {
 			msg = http.StatusText(resp.StatusCode)

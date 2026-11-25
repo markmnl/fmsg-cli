@@ -81,6 +81,9 @@ Exit codes: 0 after an event (--once) or when stopped by Ctrl-C/--timeout;
 					fmt.Fprintf(os.Stderr, "watching %s (Ctrl-C to stop)\n", client.WatchURL())
 				}
 			},
+			OnRetry: func(err error, wait time.Duration) {
+				fmt.Fprintf(os.Stderr, "reconnecting in %s: %v\n", wait, err)
+			},
 		}
 		err := client.Watch(ctx, opts, func(ev api.WatchEvent) error {
 			if len(wanted) > 0 && !wanted[ev.Type] {

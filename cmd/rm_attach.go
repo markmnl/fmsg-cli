@@ -12,14 +12,15 @@ var rmAttachCmd = &cobra.Command{
 	Short: "Remove an attachment from a message",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		client, _ := newAuthenticatedClient()
-		resolvedID, err := resolveMessageID(client, args[0])
+		resolvedID, err := resolveMessageID(ctx, client, args[0])
 		if err != nil {
 			return err
 		}
 		messageID := strconv.FormatInt(resolvedID, 10)
 		filename := args[1]
-		if err := client.DeleteAttachment(messageID, filename); err != nil {
+		if err := client.DeleteAttachment(ctx, messageID, filename); err != nil {
 			return err
 		}
 

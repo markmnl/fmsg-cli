@@ -3,8 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -32,32 +30,21 @@ and visible to them. Drafts are changed with "fmsg update" instead.`,
 
 		var data *string
 		if !editRevert {
-			var raw []byte
-			var err error
-			switch content := args[1]; content {
-			case "-":
-				raw, err = io.ReadAll(os.Stdin)
-				if err != nil {
-					return fmt.Errorf("reading stdin: %w", err)
-				}
-			default:
-				// Try as file first; fall back to using content directly as text.
-				if fileData, ferr := os.ReadFile(content); ferr == nil {
-					raw = fileData
-				} else {
-					raw = []byte(content)
-				}
+			raw, err := readMessageContent(cmd.Context(), args[1])
+			if err != nil {
+				return err
 			}
 			text := string(raw)
 			data = &text
 		}
 
+		ctx := cmd.Context()
 		client, _ := newAuthenticatedClient()
-		msgID, err := resolveMessageID(client, args[0])
+		msgID, err := resolveMessageID(ctx, client, args[0])
 		if err != nil {
 			return err
 		}
-		result, err := client.EditMessage(msgID, data)
+		result, err := client.EditMessage(ctx, msgID, data)
 		if err != nil {
 			return err
 		}

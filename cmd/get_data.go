@@ -19,17 +19,18 @@ An edited message (FMSG-008) downloads as edited; --original downloads the
 data as first sent, which stays stored.`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		messageID := args[0]
 
 		client, _ := newAuthenticatedClient()
-		resolvedID, err := resolveMessageID(client, messageID)
+		resolvedID, err := resolveMessageID(ctx, client, messageID)
 		if err != nil {
 			return err
 		}
 		messageIDStr := strconv.FormatInt(resolvedID, 10)
 		if len(args) == 2 {
 			outputPath := args[1]
-			if err := client.DownloadData(messageIDStr, getDataOriginal, outputPath); err != nil {
+			if err := client.DownloadData(ctx, messageIDStr, getDataOriginal, outputPath); err != nil {
 				return err
 			}
 
@@ -41,7 +42,7 @@ data as first sent, which stays stored.`,
 			return nil
 		}
 
-		if err := client.DownloadDataToWriter(messageIDStr, getDataOriginal, os.Stdout); err != nil {
+		if err := client.DownloadDataToWriter(ctx, messageIDStr, getDataOriginal, os.Stdout); err != nil {
 			return err
 		}
 		return nil

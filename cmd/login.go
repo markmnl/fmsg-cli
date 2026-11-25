@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -30,7 +33,7 @@ Optionally supply the credential as an argument to skip the prompt.`,
 		if len(args) > 0 {
 			credential = strings.TrimSpace(args[0])
 		} else {
-			input, err := readCredential()
+			input, err := readCredential(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -67,10 +70,19 @@ Optionally supply the credential as an argument to skip the prompt.`,
 
 var loginAddress string
 
-func readCredential() (string, error) {
+// readCredential prompts for a credential on stdin. The read is abandoned
+// with ctx's error when ctx is cancelled (Ctrl-C at the prompt).
+func readCredential(ctx context.Context) (string, error) {
 	fmt.Print("fmsg API key or user JWT: ")
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		input, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fd := int(os.Stdin.Fd())
+	if term.IsTerminal(fd) {
+		// ReadPassword turns echo off and only restores it when it returns,
+		// so put the terminal back ourselves if the prompt is abandoned.
+		state, _ := term.GetState(fd)
+		input, err := awaitContext(ctx, func() ([]byte, error) { return term.ReadPassword(fd) })
+		if err != nil && ctx.Err() != nil && state != nil {
+			_ = term.Restore(fd, state)
+		}
 		fmt.Println()
 		if err != nil {
 			return "", fmt.Errorf("reading API key: %w", err)
@@ -78,9 +90,13 @@ func readCredential() (string, error) {
 		return string(input), nil
 	}
 
-	reader := bufio.NewReader(os.Stdin)
+	return awaitContext(ctx, func() (string, error) { return readCredentialFrom(os.Stdin) })
+}
+
+func readCredentialFrom(r io.Reader) (string, error) {
+	reader := bufio.NewReader(r)
 	input, err := reader.ReadString('\n')
-	if err != nil {
+	if err != nil && !(errors.Is(err, io.EOF) && len(input) > 0) {
 		return "", fmt.Errorf("reading API key: %w", err)
 	}
 	return input, nil

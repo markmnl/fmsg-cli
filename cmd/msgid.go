@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/markmnl/fmsg-cli/internal/api"
@@ -15,7 +17,7 @@ import (
 //
 // When arg is negative the caller's inbox is fetched via GET /fmsg using the
 // provided client, so the client must already be authenticated.
-func resolveMessageID(client *api.Client, arg string) (int64, error) {
+func resolveMessageID(ctx context.Context, client *api.Client, arg string) (int64, error) {
 	id, err := strconv.ParseInt(arg, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("invalid message ID %q: %w", arg, err)
@@ -26,13 +28,17 @@ func resolveMessageID(client *api.Client, arg string) (int64, error) {
 	if id > 0 {
 		return id, nil
 	}
+	if id == math.MinInt64 || -id > int64(math.MaxInt) {
+		return 0, fmt.Errorf("invalid message ID %q: out of range", arg)
+	}
 
 	// Negative index: walk the inbox list (ordered by ID desc) a page at a
 	// time, counting only the messages "list" shows. -1 is the first, etc.
-	const pageSize = 100
+	const maxPageSize = 100
 	remaining := int(-id)
-	for offset := 0; ; offset += pageSize {
-		page, err := client.ListMessages(pageSize, offset)
+	for offset := 0; ; {
+		pageSize := min(max(remaining+5, 10), maxPageSize)
+		page, err := client.ListMessages(ctx, pageSize, offset)
 		if err != nil {
 			return 0, fmt.Errorf("resolving message index %d: %w", id, err)
 		}
@@ -44,5 +50,6 @@ func resolveMessageID(client *api.Client, arg string) (int64, error) {
 		if len(page) < pageSize {
 			return 0, fmt.Errorf("no message at index %d", id)
 		}
+		offset += len(page)
 	}
 }

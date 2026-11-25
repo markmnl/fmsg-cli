@@ -2,12 +2,15 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"slices"
+	"syscall"
 	"unicode"
 
 	"github.com/spf13/cobra"
@@ -80,10 +83,47 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "emit machine-readable JSON output")
 }
 
+// exitInterrupted is the exit code after SIGINT/SIGTERM cancelled a command:
+// 128 + SIGINT, what a shell reports for a process the signal killed.
+const exitInterrupted = 130
+
+// silenceOnInterrupt wraps every RunE under cmd so a command that fails
+// because a signal cancelled its context exits quietly, as a process killed
+// by the signal would, instead of printing "context canceled" and its usage.
+func silenceOnInterrupt(cmd *cobra.Command) {
+	for _, sub := range cmd.Commands() {
+		silenceOnInterrupt(sub)
+	}
+	run := cmd.RunE
+	if run == nil {
+		return
+	}
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		err := run(c, args)
+		if err != nil && c.Context().Err() != nil && errors.Is(err, context.Canceled) {
+			c.SilenceErrors, c.SilenceUsage = true, true
+		}
+		return err
+	}
+}
+
 // Execute runs the root command and exits on error.
 func Execute() {
 	injectDashDash()
-	if err := rootCmd.Execute(); err != nil {
+	silenceOnInterrupt(rootCmd)
+	// SIGINT/SIGTERM cancel the command context so commands can clean up
+	// (e.g. remove a partial download) instead of being killed mid-write.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	// After the first signal, restore default handling so a second one
+	// terminates a command that is slow to notice the cancellation.
+	context.AfterFunc(ctx, stop)
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
+		interrupted := ctx.Err() != nil && errors.Is(err, context.Canceled)
+		stop()
+		if interrupted {
+			os.Exit(exitInterrupted)
+		}
 		fmt.Fprintln(os.Stderr, err)
 		if errors.Is(err, errNoEvent) {
 			os.Exit(exitNoEvent)
