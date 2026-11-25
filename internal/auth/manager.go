@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -15,10 +17,12 @@ import (
 )
 
 const (
-	credentialsVersion = 2
-	refreshBefore      = 5 * time.Minute
-	authTypeAPIKey     = "api_key"
-	authTypeJWT        = "jwt"
+	credentialsVersion    = 2
+	refreshBefore         = 5 * time.Minute
+	authTypeAPIKey        = "api_key"
+	authTypeJWT           = "jwt"
+	defaultRequestTimeout = 30 * time.Second
+	maxErrorBodyBytes     = 64 << 10
 )
 
 // Token is a short-lived access token returned by fmsg-webapi.
@@ -41,10 +45,15 @@ type Manager struct {
 
 // NewManager returns a Manager for the configured fmsg-webapi base URL.
 func NewManager(apiURL string) *Manager {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.ResponseHeaderTimeout = defaultRequestTimeout
 	return &Manager{
 		APIURL: strings.TrimRight(apiURL, "/"),
-		HTTP:   &http.Client{},
-		now:    time.Now,
+		HTTP: &http.Client{
+			Transport: t,
+			Timeout:   defaultRequestTimeout,
+		},
+		now: time.Now,
 	}
 }
 
@@ -69,7 +78,10 @@ func (m *Manager) Token(ctx context.Context, forceRefresh bool) (Token, error) {
 
 	creds, err := Load()
 	if err != nil {
-		return Token{}, fmt.Errorf("missing credentials; run fmsg login with an API key or user JWT, or set FMSG_API_KEY")
+		if errors.Is(err, os.ErrNotExist) {
+			return Token{}, fmt.Errorf("missing credentials; run fmsg login with an API key or user JWT, or set FMSG_API_KEY")
+		}
+		return Token{}, fmt.Errorf("loading credentials: %w", err)
 	}
 	if strings.TrimSpace(creds.APIKey) == "" {
 		return m.tokenFromStoredJWT(creds, forceRefresh)
@@ -258,13 +270,16 @@ func (m *Manager) exchange(ctx context.Context, apiKey string) (Token, error) {
 	if err != nil {
 		return Token{}, fmt.Errorf("exchanging API key: network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxErrorBodyBytes))
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return Token{}, fmt.Errorf("API key was rejected; it may be invalid, expired, revoked, CIDR-blocked, or its sub-account may be unavailable")
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		msg := strings.TrimSpace(string(body))
 		if msg == "" {
 			msg = http.StatusText(resp.StatusCode)

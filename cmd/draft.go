@@ -1,10 +1,7 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -31,57 +28,32 @@ var draftCreateCmd = &cobra.Command{
  - "-" to read from stdin`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		client, manager := newAuthenticatedClient()
-		user, err := manager.User(cmd.Context())
+		user, err := manager.User(ctx)
 		if err != nil {
 			return err
 		}
 
 		recipient := args[0]
-		content := args[1]
-
-		var data []byte
-		switch content {
-		case "-":
-			data, err = io.ReadAll(os.Stdin)
-			if err != nil {
-				return fmt.Errorf("reading stdin: %w", err)
-			}
-		default:
-			if fileData, ferr := os.ReadFile(content); ferr == nil {
-				data = fileData
-			} else {
-				data = []byte(content)
-			}
-		}
-
-		msg := map[string]any{
-			"from":    user,
-			"to":      []string{recipient},
-			"version": 1,
-			"type":    "text/plain",
-			"size":    len(data),
-			"data":    string(data),
-		}
-		if cmd.Flags().Changed("pid") {
-			msg["pid"] = draftCreatePID
-		}
-		if cmd.Flags().Changed("topic") {
-			msg["topic"] = draftCreateTopic
-		}
-		if draftCreateImportant {
-			msg["important"] = true
-		}
-		if draftCreateNoReply {
-			msg["no_reply"] = true
-		}
-
-		payload, err := json.Marshal(msg)
+		data, err := readMessageContent(args[1])
 		if err != nil {
-			return fmt.Errorf("encoding message: %w", err)
+			return err
 		}
 
-		draft, err := client.CreateMessage(payload)
+		payload, err := buildDraftPayload(user, recipient, data, draftOptions{
+			pid:       draftCreatePID,
+			hasPID:    cmd.Flags().Changed("pid"),
+			topic:     draftCreateTopic,
+			hasTopic:  cmd.Flags().Changed("topic"),
+			important: draftCreateImportant,
+			noReply:   draftCreateNoReply,
+		})
+		if err != nil {
+			return err
+		}
+
+		draft, err := client.CreateMessage(ctx, payload)
 		if err != nil {
 			return fmt.Errorf("creating draft: %w", err)
 		}
@@ -101,13 +73,14 @@ var draftSendCmd = &cobra.Command{
 	Short: "Send a previously created draft",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		client, _ := newAuthenticatedClient()
-		msgID, err := resolveMessageID(client, args[0])
+		msgID, err := resolveMessageID(ctx, client, args[0])
 		if err != nil {
 			return err
 		}
 
-		sent, err := client.SendMessage(msgID)
+		sent, err := client.SendMessage(ctx, msgID)
 		if err != nil {
 			return fmt.Errorf("sending draft: %w", err)
 		}

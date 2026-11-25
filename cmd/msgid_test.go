@@ -1,11 +1,16 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/markmnl/fmsg-cli/internal/api"
@@ -54,7 +59,7 @@ func TestResolveMessageID_Positive(t *testing.T) {
 	defer srv.Close()
 	client := api.New(srv.URL, api.StaticTokenProvider("token"))
 
-	id, err := resolveMessageID(client, "42")
+	id, err := resolveMessageID(context.Background(), client, "42")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,7 +73,7 @@ func TestResolveMessageID_NegativeOne(t *testing.T) {
 	defer srv.Close()
 	client := api.New(srv.URL, api.StaticTokenProvider("token"))
 
-	id, err := resolveMessageID(client, "-1")
+	id, err := resolveMessageID(context.Background(), client, "-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -82,7 +87,7 @@ func TestResolveMessageID_NegativeTwo(t *testing.T) {
 	defer srv.Close()
 	client := api.New(srv.URL, api.StaticTokenProvider("token"))
 
-	id, err := resolveMessageID(client, "-2")
+	id, err := resolveMessageID(context.Background(), client, "-2")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -96,7 +101,7 @@ func TestResolveMessageID_NegativeThree(t *testing.T) {
 	defer srv.Close()
 	client := api.New(srv.URL, api.StaticTokenProvider("token"))
 
-	id, err := resolveMessageID(client, "-3")
+	id, err := resolveMessageID(context.Background(), client, "-3")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -110,7 +115,7 @@ func TestResolveMessageID_NegativeOutOfRange(t *testing.T) {
 	defer srv.Close()
 	client := api.New(srv.URL, api.StaticTokenProvider("token"))
 
-	_, err := resolveMessageID(client, "-4")
+	_, err := resolveMessageID(context.Background(), client, "-4")
 	if err == nil {
 		t.Fatal("expected error for out-of-range index")
 	}
@@ -118,15 +123,46 @@ func TestResolveMessageID_NegativeOutOfRange(t *testing.T) {
 
 func TestResolveMessageID_Zero(t *testing.T) {
 	client := api.New("http://unused", api.StaticTokenProvider("token"))
-	_, err := resolveMessageID(client, "0")
+	_, err := resolveMessageID(context.Background(), client, "0")
 	if err == nil {
 		t.Fatal("expected error for ID=0")
 	}
 }
 
+func TestResolveMessageID_MinInt64DoesNotPanic(t *testing.T) {
+	client := api.New("http://unused", api.StaticTokenProvider("token"))
+	_, err := resolveMessageID(context.Background(), client, strconv.FormatInt(math.MinInt64, 10))
+	if err == nil {
+		t.Fatal("expected error for math.MinInt64")
+	}
+}
+
+func TestResolveMessageID_UsesSmallAdaptivePageSize(t *testing.T) {
+	var limits []int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		limits = append(limits, limit)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]api.MessageListItem{{ID: 77}})
+	}))
+	defer srv.Close()
+
+	client := api.New(srv.URL, api.StaticTokenProvider("token"))
+	id, err := resolveMessageID(context.Background(), client, "-1")
+	if err != nil {
+		t.Fatalf("resolveMessageID: %v", err)
+	}
+	if id != 77 {
+		t.Fatalf("id = %d, want 77", id)
+	}
+	if len(limits) != 1 || limits[0] != 10 {
+		t.Fatalf("limits = %v, want [10]", limits)
+	}
+}
+
 func TestResolveMessageID_Invalid(t *testing.T) {
 	client := api.New("http://unused", api.StaticTokenProvider("token"))
-	_, err := resolveMessageID(client, "abc")
+	_, err := resolveMessageID(context.Background(), client, "abc")
 	if err == nil {
 		t.Fatal("expected error for non-numeric input")
 	}
@@ -214,7 +250,7 @@ func TestResolveMessageID_SkipsEditMessages(t *testing.T) {
 	client := api.New(srv.URL, api.StaticTokenProvider("token"))
 
 	for arg, want := range map[string]int64{"-1": 90, "-2": 50} {
-		id, err := resolveMessageID(client, arg)
+		id, err := resolveMessageID(context.Background(), client, arg)
 		if err != nil {
 			t.Fatalf("%s: unexpected error: %v", arg, err)
 		}
@@ -222,7 +258,7 @@ func TestResolveMessageID_SkipsEditMessages(t *testing.T) {
 			t.Fatalf("%s: want %d, got %d", arg, want, id)
 		}
 	}
-	if _, err := resolveMessageID(client, "-3"); err == nil {
+	if _, err := resolveMessageID(context.Background(), client, "-3"); err == nil {
 		t.Fatal("-3: want an error, only two messages are visible")
 	}
 }
@@ -241,6 +277,68 @@ func TestListLineMarksEditsAndEditedMessages(t *testing.T) {
 	for _, c := range cases {
 		if got := listLine(c.msg, "[]"); got != c.want {
 			t.Errorf("listLine = %q, want %q", got, c.want)
+		}
+	}
+}
+
+func TestReadCredentialFromEOFWithoutNewline(t *testing.T) {
+	got, err := readCredentialFrom(strings.NewReader("fmsgk_no_newline"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "fmsgk_no_newline" {
+		t.Fatalf("got %q, want %q", got, "fmsgk_no_newline")
+	}
+
+	got, err = readCredentialFrom(strings.NewReader("fmsgk_with_newline\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.TrimSpace(got) != "fmsgk_with_newline" {
+		t.Fatalf("got %q", got)
+	}
+
+	if _, err := readCredentialFrom(strings.NewReader("")); err == nil {
+		t.Fatal("expected error on empty EOF")
+	}
+}
+
+func TestReadMessageContent(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "body.txt")
+	if err := os.WriteFile(file, []byte("from file"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := readMessageContent(file)
+	if err != nil || string(got) != "from file" {
+		t.Fatalf("readMessageContent(file) = %q, %v", string(got), err)
+	}
+
+	got, err = readMessageContent("literal text message")
+	if err != nil || string(got) != "literal text message" {
+		t.Fatalf("readMessageContent(literal) = %q, %v", string(got), err)
+	}
+
+	// Directory falls back to literal text.
+	got, err = readMessageContent(dir)
+	if err != nil || string(got) != dir {
+		t.Fatalf("readMessageContent(dir) = %q, %v", string(got), err)
+	}
+
+	// Existing unreadable regular file must return an error instead of falling back.
+	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
+		unreadable := filepath.Join(dir, "secret.txt")
+		if err := os.WriteFile(unreadable, []byte("secret"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(unreadable, 0000); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(unreadable, 0600) })
+
+		if _, err := readMessageContent(unreadable); err == nil {
+			t.Fatal("expected explicit error for unreadable existing regular file")
 		}
 	}
 }

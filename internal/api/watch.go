@@ -50,9 +50,10 @@ type WatchOptions struct {
 	// OnConnect is called after every successful handshake (including
 	// reconnects), before any event from that connection is delivered.
 	OnConnect func()
-	// Reconnect re-dials with backoff when the connection drops instead of
-	// returning the read error. Handshake failures other than an expired
-	// token (401, retried once with a fresh token) are never retried.
+	// Reconnect re-dials with backoff when the connection drops or a transient
+	// dial failure (network error or 5xx handshake response) occurs. Auth errors
+	// and 4xx handshake failures (other than a single 401 token refresh retry)
+	// fail fast.
 	Reconnect bool
 	// Dialer overrides the WebSocket dialer (tests).
 	Dialer *websocket.Dialer
@@ -60,24 +61,64 @@ type WatchOptions struct {
 
 // readTimeout bounds silence on the socket. The server pings every 45s, so a
 // healthy connection always produces a frame well inside this window.
-const readTimeout = 90 * time.Second
+const (
+	readTimeout          = 90 * time.Second
+	maxWatchMessageBytes = 4 << 20
+)
+
+// Backoff and health parameters (vars so unit tests can shorten them).
+var (
+	watchInitialBackoff  = time.Second
+	watchMaxBackoff      = 30 * time.Second
+	watchHealthyDuration = 30 * time.Second
+)
+
+func nextWatchBackoff(cur time.Duration) time.Duration {
+	cur *= 2
+	if cur > watchMaxBackoff {
+		return watchMaxBackoff
+	}
+	return cur
+}
+
+func waitBackoff(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
 
 // Watch connects to GET /fmsg/ws and calls fn for every pushed event until
 // ctx is cancelled, fn returns an error, or (with Reconnect off) the
 // connection drops.
 func (c *Client) Watch(ctx context.Context, opts WatchOptions, fn WatchHandler) error {
-	backoff := time.Second
+	backoff := watchInitialBackoff
 	for {
 		conn, err := c.dialWatch(ctx, opts.Dialer)
 		if err != nil {
-			return err
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if !opts.Reconnect || !isTransientDialError(err) {
+				return err
+			}
+			if err := waitBackoff(ctx, backoff); err != nil {
+				return err
+			}
+			backoff = nextWatchBackoff(backoff)
+			continue
 		}
+
+		connectedAt := time.Now()
 		if opts.OnConnect != nil {
 			opts.OnConnect()
 		}
-		backoff = time.Second
-		err = readEvents(ctx, conn, fn)
-		conn.Close()
+		eventsRead, err := readEvents(ctx, conn, fn)
+		_ = conn.Close()
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -88,14 +129,16 @@ func (c *Client) Watch(ctx context.Context, opts WatchOptions, fn WatchHandler) 
 		if !opts.Reconnect || !errors.As(err, &readErr) {
 			return err
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(backoff):
+
+		// Only reset backoff when the connection proved healthy (delivered at
+		// least one event or remained open for watchHealthyDuration).
+		if eventsRead > 0 || time.Since(connectedAt) >= watchHealthyDuration {
+			backoff = watchInitialBackoff
 		}
-		if backoff < 30*time.Second {
-			backoff *= 2
+		if err := waitBackoff(ctx, backoff); err != nil {
+			return err
 		}
+		backoff = nextWatchBackoff(backoff)
 	}
 }
 
@@ -105,6 +148,25 @@ type watchReadError struct{ err error }
 
 func (e *watchReadError) Error() string { return "websocket: " + e.err.Error() }
 func (e *watchReadError) Unwrap() error { return e.err }
+
+// watchDialNetworkError marks a transport/network failure during WebSocket dial
+// so Watch can distinguish transient dial failures from auth errors.
+type watchDialNetworkError struct{ err error }
+
+func (e *watchDialNetworkError) Error() string { return "network error: " + e.err.Error() }
+func (e *watchDialNetworkError) Unwrap() error { return e.err }
+
+func isTransientDialError(err error) bool {
+	var netErr *watchDialNetworkError
+	if errors.As(err, &netErr) {
+		return true
+	}
+	var ae *apiError
+	if errors.As(err, &ae) {
+		return ae.StatusCode >= 500 && ae.StatusCode < 600
+	}
+	return false
+}
 
 // WatchURL returns the WebSocket endpoint derived from BaseURL.
 func (c *Client) WatchURL() string {
@@ -128,39 +190,50 @@ func (c *Client) dialWatch(ctx context.Context, dialer *websocket.Dialer) (*webs
 	if dialer == nil {
 		dialer = websocket.DefaultDialer
 	}
-	dial := func(forceRefresh bool) (*websocket.Conn, *http.Response, error) {
+
+	dialWithToken := func(forceRefresh bool) (*websocket.Conn, *http.Response, error, bool) {
 		token, err := c.Auth.AccessToken(ctx, forceRefresh)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, err, true
 		}
 		h := http.Header{}
 		h.Set("Authorization", "Bearer "+token)
-		return dialer.DialContext(ctx, c.WatchURL(), h)
+		conn, resp, err := dialer.DialContext(ctx, c.WatchURL(), h)
+		return conn, resp, err, false
 	}
-	conn, resp, err := dial(false)
-	if err != nil && resp != nil && resp.StatusCode == http.StatusUnauthorized {
-		conn, resp, err = dial(true)
+
+	conn, resp, err, authErr := dialWithToken(false)
+	if err != nil && !authErr && resp != nil && resp.StatusCode == http.StatusUnauthorized {
+		drainAndClose(resp.Body)
+		conn, resp, err, authErr = dialWithToken(true)
 	}
 	if err != nil {
-		if resp != nil {
-			return nil, &apiError{StatusCode: resp.StatusCode, Body: http.StatusText(resp.StatusCode)}
+		if authErr {
+			return nil, err
 		}
-		return nil, fmt.Errorf("network error: %w", err)
+		if resp != nil {
+			return nil, &apiError{
+				StatusCode: resp.StatusCode,
+				Body:       readErrorBody(resp.Body, resp.StatusCode),
+			}
+		}
+		return nil, &watchDialNetworkError{err: err}
 	}
 	return conn, nil
 }
 
-func readEvents(ctx context.Context, conn *websocket.Conn, fn WatchHandler) error {
+func readEvents(ctx context.Context, conn *websocket.Conn, fn WatchHandler) (int, error) {
 	// Close the socket when ctx ends so a blocked ReadMessage returns.
-	stop := context.AfterFunc(ctx, func() { conn.Close() })
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
 
-	conn.SetReadDeadline(time.Now().Add(readTimeout))
+	conn.SetReadLimit(maxWatchMessageBytes)
+	_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
 	conn.SetPongHandler(func(string) error { return conn.SetReadDeadline(time.Now().Add(readTimeout)) })
 	// gorilla's default ping handler answers with a pong; it also needs the
 	// deadline pushed, since a ping is proof the server is alive.
 	conn.SetPingHandler(func(data string) error {
-		conn.SetReadDeadline(time.Now().Add(readTimeout))
+		_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
 		err := conn.WriteControl(websocket.PongMessage, []byte(data), time.Now().Add(10*time.Second))
 		if err == websocket.ErrCloseSent {
 			return nil
@@ -168,18 +241,20 @@ func readEvents(ctx context.Context, conn *websocket.Conn, fn WatchHandler) erro
 		return err
 	})
 
+	eventsRead := 0
 	for {
 		_, payload, err := conn.ReadMessage()
 		if err != nil {
-			return &watchReadError{err}
+			return eventsRead, &watchReadError{err}
 		}
-		conn.SetReadDeadline(time.Now().Add(readTimeout))
+		_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
 		var ev WatchEvent
 		if err := json.Unmarshal(payload, &ev); err != nil {
-			return &watchReadError{fmt.Errorf("decoding event: %w", err)}
+			return eventsRead, &watchReadError{fmt.Errorf("decoding event: %w", err)}
 		}
 		if err := fn(ev); err != nil {
-			return err
+			return eventsRead, err
 		}
+		eventsRead++
 	}
 }

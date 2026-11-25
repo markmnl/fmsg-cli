@@ -12,15 +12,16 @@ var attachCmd = &cobra.Command{
 	Short: "Upload a file as an attachment to a message",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		client, _ := newAuthenticatedClient()
-		resolvedID, err := resolveMessageID(client, args[0])
+		resolvedID, err := resolveMessageID(ctx, client, args[0])
 		if err != nil {
 			return err
 		}
 		messageID := strconv.FormatInt(resolvedID, 10)
 		filePath := args[1]
 
-		result, err := client.UploadAttachment(messageID, filePath)
+		result, err := client.UploadAttachment(ctx, messageID, filePath)
 		if err != nil {
 			return err
 		}

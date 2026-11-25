@@ -13,12 +13,13 @@ var getCmd = &cobra.Command{
 	Short: "Retrieve a message by ID",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		client, _ := newAuthenticatedClient()
-		msgID, err := resolveMessageID(client, args[0])
+		msgID, err := resolveMessageID(ctx, client, args[0])
 		if err != nil {
 			return err
 		}
-		msg, err := client.GetMessage(strconv.FormatInt(msgID, 10))
+		msg, err := client.GetMessage(ctx, strconv.FormatInt(msgID, 10))
 		if err != nil {
 			return err
 		}

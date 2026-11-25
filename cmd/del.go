@@ -11,12 +11,13 @@ var delCmd = &cobra.Command{
 	Short: "Delete a message by ID",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		client, _ := newAuthenticatedClient()
-		msgID, err := resolveMessageID(client, args[0])
+		msgID, err := resolveMessageID(ctx, client, args[0])
 		if err != nil {
 			return err
 		}
-		if err := client.DeleteMessage(msgID); err != nil {
+		if err := client.DeleteMessage(ctx, msgID); err != nil {
 			return err
 		}
 

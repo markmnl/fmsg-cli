@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -78,9 +80,13 @@ func readCredential() (string, error) {
 		return string(input), nil
 	}
 
-	reader := bufio.NewReader(os.Stdin)
+	return readCredentialFrom(os.Stdin)
+}
+
+func readCredentialFrom(r io.Reader) (string, error) {
+	reader := bufio.NewReader(r)
 	input, err := reader.ReadString('\n')
-	if err != nil {
+	if err != nil && !(errors.Is(err, io.EOF) && len(input) > 0) {
 		return "", fmt.Errorf("reading API key: %w", err)
 	}
 	return input, nil

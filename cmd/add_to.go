@@ -11,15 +11,16 @@ var addToCmd = &cobra.Command{
 	Short: "Add additional recipients to an existing message",
 	Args:  cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		client, _ := newAuthenticatedClient()
-		msgID, err := resolveMessageID(client, args[0])
+		msgID, err := resolveMessageID(ctx, client, args[0])
 		if err != nil {
 			return err
 		}
 
 		recipients := args[1:]
 
-		result, err := client.AddRecipients(msgID, recipients)
+		result, err := client.AddRecipients(ctx, msgID, recipients)
 		if err != nil {
 			return err
 		}

@@ -25,7 +25,7 @@ one carries is already applied to the message it edits, which is marked
 fewer than --limit rows.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, _ := newAuthenticatedClient()
-		messages, err := client.ListSentMessages(sentLimit, sentOffset)
+		messages, err := client.ListSentMessages(cmd.Context(), sentLimit, sentOffset)
 		if err != nil {
 			return err
 		}

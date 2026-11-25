@@ -478,3 +478,84 @@ func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
+
+func TestSaveIsAtomicAndLoadDoesNotCreateConfigDir(t *testing.T) {
+	cfgDir := setTestConfigDir(t)
+	t.Setenv("FMSG_API_KEY", "")
+
+	// Load on missing credentials must not create the config directory.
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error from Load when auth.json is absent")
+	}
+	if _, err := os.Stat(cfgDir); !os.IsNotExist(err) {
+		t.Fatalf("Load created config dir unexpectedly: err=%v", err)
+	}
+
+	first := Credentials{
+		Version:     2,
+		AuthType:    "api_key",
+		APIKey:      "fmsgk_one",
+		AccessToken: testJWT("@one@example.com"),
+		TokenType:   "Bearer",
+		ExpiresAt:   time.Now().Add(time.Hour).UTC().Truncate(time.Second),
+		User:        "@one@example.com",
+		APIURL:      "http://api.example",
+	}
+	if err := Save(first); err != nil {
+		t.Fatalf("Save first: %v", err)
+	}
+
+	second := first
+	second.APIKey = "fmsgk_two"
+	second.User = "@two@example.com"
+	if err := Save(second); err != nil {
+		t.Fatalf("Save second: %v", err)
+	}
+
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load after overwrite: %v", err)
+	}
+	if got.APIKey != "fmsgk_two" || got.User != "@two@example.com" {
+		t.Fatalf("loaded credentials = %+v", got)
+	}
+
+	entries, err := os.ReadDir(cfgDir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "auth.json" {
+		t.Fatalf("expected only auth.json in %s, got %v", cfgDir, entries)
+	}
+}
+
+func TestManagerTokenPreservesCorruptCredentialsError(t *testing.T) {
+	cfgDir := setTestConfigDir(t)
+	t.Setenv("FMSG_API_KEY", "")
+
+	// Missing auth.json yields the friendly missing-credentials guidance.
+	m := NewManager("http://api.example")
+	_, err := m.Token(context.Background(), false)
+	if err == nil || !strings.Contains(err.Error(), "missing credentials") {
+		t.Fatalf("missing auth.json err = %v, want missing credentials message", err)
+	}
+
+	// Corrupt auth.json must surface the decode error, not "missing credentials".
+	if err := os.MkdirAll(cfgDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "auth.json"), []byte("{corrupt json"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = m.Token(context.Background(), false)
+	if err == nil {
+		t.Fatal("expected error for corrupt auth.json")
+	}
+	if strings.Contains(err.Error(), "missing credentials") {
+		t.Fatalf("corrupt auth.json masked as missing credentials: %v", err)
+	}
+	if !strings.Contains(err.Error(), "decoding credentials") {
+		t.Fatalf("expected decoding credentials error, got: %v", err)
+	}
+}

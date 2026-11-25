@@ -3,6 +3,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,20 +22,57 @@ type Credentials struct {
 	APIURL      string    `json:"api_url,omitempty"`
 }
 
-// storePath returns the path to auth.json, creating parent directories as needed.
+// storePath returns the path to auth.json without creating parent directories.
 func storePath() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("locating config directory: %w", err)
 	}
-	dir := filepath.Join(configDir, "fmsg")
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return "", fmt.Errorf("creating config directory: %w", err)
-	}
-	return filepath.Join(dir, "auth.json"), nil
+	return filepath.Join(configDir, "fmsg", "auth.json"), nil
 }
 
-// Save writes credentials to disk with 0600 permissions.
+// writeFileAtomic writes data to path atomically via a temporary file in the
+// same directory, applying perm, syncing to disk, and renaming into place.
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
+	}
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	success := false
+	defer func() {
+		if !success {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	success = true
+	return nil
+}
+
+// Save writes credentials to disk atomically with 0600 permissions.
 func Save(creds Credentials) error {
 	path, err := storePath()
 	if err != nil {
@@ -46,7 +84,7 @@ func Save(creds Credentials) error {
 		return fmt.Errorf("encoding credentials: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := writeFileAtomic(path, data, 0600); err != nil {
 		return fmt.Errorf("writing credentials: %w", err)
 	}
 	return nil
@@ -61,8 +99,8 @@ func Load() (Credentials, error) {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return Credentials{}, fmt.Errorf("no stored credentials found")
+		if errors.Is(err, os.ErrNotExist) {
+			return Credentials{}, fmt.Errorf("no stored credentials found: %w", err)
 		}
 		return Credentials{}, fmt.Errorf("reading credentials: %w", err)
 	}

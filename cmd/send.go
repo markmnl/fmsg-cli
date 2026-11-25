@@ -1,10 +1,7 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -26,65 +23,37 @@ var sendCmd = &cobra.Command{
  - "-" to read from stdin`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		client, manager := newAuthenticatedClient()
-		user, err := manager.User(cmd.Context())
+		user, err := manager.User(ctx)
 		if err != nil {
 			return err
 		}
 
 		recipient := args[0]
-		content := args[1]
-
-		var data []byte
-
-		switch content {
-		case "-":
-			// Read from stdin.
-			data, err = io.ReadAll(os.Stdin)
-			if err != nil {
-				return fmt.Errorf("reading stdin: %w", err)
-			}
-		default:
-			// Try as file first; fall back to using content directly as text.
-			if fileData, ferr := os.ReadFile(content); ferr == nil {
-				data = fileData
-			} else {
-				data = []byte(content)
-			}
-		}
-
-		// Build a draft payload.
-		msg := map[string]any{
-			"from":    user,
-			"to":      []string{recipient},
-			"version": 1,
-			"type":    "text/plain",
-			"size":    len(data),
-			"data":    string(data),
-		}
-		if cmd.Flags().Changed("pid") {
-			msg["pid"] = sendPID
-		}
-		if cmd.Flags().Changed("topic") {
-			msg["topic"] = sendTopic
-		}
-		if sendImportant {
-			msg["important"] = true
-		}
-		if sendNoReply {
-			msg["no_reply"] = true
-		}
-		payload, err := json.Marshal(msg)
+		data, err := readMessageContent(args[1])
 		if err != nil {
-			return fmt.Errorf("encoding message: %w", err)
+			return err
 		}
 
-		draft, err := client.CreateMessage(payload)
+		payload, err := buildDraftPayload(user, recipient, data, draftOptions{
+			pid:       sendPID,
+			hasPID:    cmd.Flags().Changed("pid"),
+			topic:     sendTopic,
+			hasTopic:  cmd.Flags().Changed("topic"),
+			important: sendImportant,
+			noReply:   sendNoReply,
+		})
+		if err != nil {
+			return err
+		}
+
+		draft, err := client.CreateMessage(ctx, payload)
 		if err != nil {
 			return fmt.Errorf("creating draft: %w", err)
 		}
 
-		sent, err := client.SendMessage(draft.ID)
+		sent, err := client.SendMessage(ctx, draft.ID)
 		if err != nil {
 			return fmt.Errorf("sending message: %w", err)
 		}

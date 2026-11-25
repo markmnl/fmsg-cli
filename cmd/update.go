@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"os"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -33,13 +31,14 @@ Only provided fields are updated; recipients in to are fully replaced.
 and merged first — unchanged fields are preserved.)`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		client, manager := newAuthenticatedClient()
-		user, err := manager.User(cmd.Context())
+		user, err := manager.User(ctx)
 		if err != nil {
 			return err
 		}
 
-		msgID, err := resolveMessageID(client, args[0])
+		msgID, err := resolveMessageID(ctx, client, args[0])
 		if err != nil {
 			return err
 		}
@@ -48,7 +47,7 @@ and merged first — unchanged fields are preserved.)`,
 		// merge, so fields the caller didn't provide are preserved rather
 		// than wiped.
 		idStr := strconv.FormatInt(msgID, 10)
-		existing, err := client.GetMessage(idStr)
+		existing, err := client.GetMessage(ctx, idStr)
 		if err != nil {
 			return fmt.Errorf("fetching current draft: %w", err)
 		}
@@ -94,23 +93,13 @@ and merged first — unchanged fields are preserved.)`,
 
 		var data []byte
 		if len(args) == 2 {
-			content := args[1]
-			switch content {
-			case "-":
-				data, err = io.ReadAll(os.Stdin)
-				if err != nil {
-					return fmt.Errorf("reading stdin: %w", err)
-				}
-			default:
-				if fileData, ferr := os.ReadFile(content); ferr == nil {
-					data = fileData
-				} else {
-					data = []byte(content)
-				}
+			data, err = readMessageContent(args[1])
+			if err != nil {
+				return err
 			}
 		} else if existing.Size > 0 {
 			var buf bytes.Buffer
-			if err := client.DownloadDataToWriter(idStr, false, &buf); err != nil {
+			if err := client.DownloadDataToWriter(ctx, idStr, false, &buf); err != nil {
 				return fmt.Errorf("fetching current draft body: %w", err)
 			}
 			data = buf.Bytes()
@@ -134,7 +123,7 @@ and merged first — unchanged fields are preserved.)`,
 			return fmt.Errorf("encoding message: %w", err)
 		}
 
-		if err := client.UpdateMessage(msgID, payload); err != nil {
+		if err := client.UpdateMessage(ctx, msgID, payload); err != nil {
 			return err
 		}
 

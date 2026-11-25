@@ -27,7 +27,7 @@ var subAccountsListCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, _ := newAuthenticatedClient()
-		list, err := client.ListSubAccounts()
+		list, err := client.ListSubAccounts(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -58,7 +58,7 @@ var subAccountsGetCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, _ := newAuthenticatedClient()
-		account, err := client.GetSubAccount(args[0])
+		account, err := client.GetSubAccount(cmd.Context(), args[0])
 		if err != nil {
 			return err
 		}
@@ -84,7 +84,7 @@ var subAccountsCreateCmd = &cobra.Command{
 		}
 
 		client, _ := newAuthenticatedClient()
-		account, err := client.CreateSubAccount(args[0], cidrs, subAccountCreateExpiry)
+		account, err := client.CreateSubAccount(cmd.Context(), args[0], cidrs, subAccountCreateExpiry)
 		if err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ var subAccountsUpdateCIDRsCmd = &cobra.Command{
 		}
 
 		client, _ := newAuthenticatedClient()
-		account, err := client.UpdateSubAccountCIDRs(args[0], cidrs)
+		account, err := client.UpdateSubAccountCIDRs(cmd.Context(), args[0], cidrs)
 		if err != nil {
 			return err
 		}
@@ -132,7 +132,7 @@ var subAccountsRotateKeyCmd = &cobra.Command{
 		}
 
 		client, _ := newAuthenticatedClient()
-		account, err := client.RotateSubAccountKey(args[0], subAccountRotateExpiry)
+		account, err := client.RotateSubAccountKey(cmd.Context(), args[0], subAccountRotateExpiry)
 		if err != nil {
 			return err
 		}
@@ -153,7 +153,7 @@ var subAccountsDeleteCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, _ := newAuthenticatedClient()
-		if err := client.DeleteSubAccount(args[0]); err != nil {
+		if err := client.DeleteSubAccount(cmd.Context(), args[0]); err != nil {
 			return err
 		}
 		if jsonOutput {

@@ -2,10 +2,13 @@ package api
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -43,7 +46,7 @@ func TestClientRefreshesTokenAndRetriesReplayableRequestOn401(t *testing.T) {
 	defer srv.Close()
 
 	client := New(srv.URL, provider)
-	resp, err := client.CreateMessage([]byte(`{"hello":"world"}`))
+	resp, err := client.CreateMessage(context.Background(), []byte(`{"hello":"world"}`))
 	if err != nil {
 		t.Fatalf("CreateMessage: %v", err)
 	}
@@ -98,7 +101,7 @@ func TestGetMessageDecodesDeliveryAndReadFields(t *testing.T) {
 	defer srv.Close()
 
 	client := New(srv.URL, StaticTokenProvider("token"))
-	msg, err := client.GetMessage("42")
+	msg, err := client.GetMessage(context.Background(), "42")
 	if err != nil {
 		t.Fatalf("GetMessage: %v", err)
 	}
@@ -126,14 +129,27 @@ func TestGetMessageDecodesDeliveryAndReadFields(t *testing.T) {
 	}
 }
 
-// TestUploadAttachmentReturnsServerResponse pins the upload response shape.
+// TestUploadAttachmentReturnsServerResponse pins the upload response shape and
+// verifies regular files send an exact Content-Length.
 func TestUploadAttachmentReturnsServerResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/fmsg/42/attach" || r.Method != http.MethodPost {
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
-		if _, _, err := r.FormFile("file"); err != nil {
+		if r.ContentLength <= 0 {
+			t.Fatalf("expected positive Content-Length for regular file, got %d", r.ContentLength)
+		}
+		f, _, err := r.FormFile("file")
+		if err != nil {
 			t.Fatalf("reading multipart file field: %v", err)
+		}
+		defer f.Close()
+		got, err := io.ReadAll(f)
+		if err != nil {
+			t.Fatalf("reading uploaded bytes: %v", err)
+		}
+		if string(got) != "hello world" {
+			t.Fatalf("uploaded content = %q, want %q", string(got), "hello world")
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
@@ -151,13 +167,196 @@ func TestUploadAttachmentReturnsServerResponse(t *testing.T) {
 	tmp.Close()
 
 	client := New(srv.URL, StaticTokenProvider("token"))
-	result, err := client.UploadAttachment("42", tmp.Name())
+	result, err := client.UploadAttachment(context.Background(), "42", tmp.Name())
 	if err != nil {
 		t.Fatalf("UploadAttachment: %v", err)
 	}
 	if result.Filename != "notes.txt" || result.Size != 11 {
 		t.Fatalf("upload response: got %+v", result)
 	}
+}
+
+func TestUploadAttachmentStreamingReplaysOn401(t *testing.T) {
+	content := strings.Repeat("stream-payload-chunk-", 4096)
+	provider := &sequenceTokenProvider{}
+	attempts := 0
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if r.ContentLength <= int64(len(content)) {
+			t.Fatalf("attempt %d: expected exact multipart Content-Length > %d, got %d", attempts, len(content), r.ContentLength)
+		}
+		f, hdr, err := r.FormFile("file")
+		if err != nil {
+			t.Fatalf("attempt %d: FormFile: %v", attempts, err)
+		}
+		got, err := io.ReadAll(f)
+		f.Close()
+		if err != nil {
+			t.Fatalf("attempt %d: reading file: %v", attempts, err)
+		}
+		if string(got) != content {
+			t.Fatalf("attempt %d: body mismatch (len %d vs %d)", attempts, len(got), len(content))
+		}
+		if hdr.Filename != "report.bin" {
+			t.Fatalf("attempt %d: filename = %q, want report.bin", attempts, hdr.Filename)
+		}
+
+		switch attempts {
+		case 1:
+			if got := r.Header.Get("Authorization"); got != "Bearer stale-token" {
+				t.Fatalf("attempt 1 Authorization = %q", got)
+			}
+			http.Error(w, "expired", http.StatusUnauthorized)
+		case 2:
+			if got := r.Header.Get("Authorization"); got != "Bearer fresh-token" {
+				t.Fatalf("attempt 2 Authorization = %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"filename":"report.bin","size":86016}`))
+		default:
+			t.Fatalf("unexpected attempt %d", attempts)
+		}
+	}))
+	defer srv.Close()
+
+	path := filepath.Join(t.TempDir(), "report.bin")
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("writing test file: %v", err)
+	}
+
+	client := New(srv.URL, provider)
+	res, err := client.UploadAttachment(context.Background(), "42", path)
+	if err != nil {
+		t.Fatalf("UploadAttachment: %v", err)
+	}
+	if attempts != 2 || !provider.sawForceRefresh {
+		t.Fatalf("attempts=%d sawForceRefresh=%v, want 2/true", attempts, provider.sawForceRefresh)
+	}
+	if res.Filename != "report.bin" {
+		t.Fatalf("result = %+v", res)
+	}
+}
+
+func TestAttachmentAndMessagePathEscaping(t *testing.T) {
+	var rawPaths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rawPaths = append(rawPaths, r.Method+" "+r.URL.EscapedPath())
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("file-bytes"))
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, StaticTokenProvider("token"))
+	outPath := filepath.Join(t.TempDir(), "out.txt")
+
+	const filename = "my report #1 100%?.txt"
+	if err := client.DownloadAttachment(context.Background(), "42/../../x", filename, outPath); err != nil {
+		t.Fatalf("DownloadAttachment: %v", err)
+	}
+	if err := client.DeleteAttachment(context.Background(), "42", filename); err != nil {
+		t.Fatalf("DeleteAttachment: %v", err)
+	}
+
+	want := []string{
+		"GET /fmsg/42%2F..%2F..%2Fx/attach/my%20report%20%231%20100%25%3F.txt",
+		"DELETE /fmsg/42/attach/my%20report%20%231%20100%25%3F.txt",
+	}
+	if len(rawPaths) != len(want) {
+		t.Fatalf("paths = %q, want %q", rawPaths, want)
+	}
+	for i := range want {
+		if rawPaths[i] != want[i] {
+			t.Errorf("path[%d] = %q, want %q", i, rawPaths[i], want[i])
+		}
+	}
+}
+
+func TestAtomicDownloadPreservesExistingFileOnError(t *testing.T) {
+	t.Run("http error leaves existing file untouched", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "not found", http.StatusNotFound)
+		}))
+		defer srv.Close()
+
+		dir := t.TempDir()
+		existing := filepath.Join(dir, "existing.txt")
+		if err := os.WriteFile(existing, []byte("precious data"), 0600); err != nil {
+			t.Fatal(err)
+		}
+
+		client := New(srv.URL, StaticTokenProvider("token"))
+		err := client.DownloadData(context.Background(), "99", false, existing)
+		var ae *apiError
+		if !errors.As(err, &ae) || ae.StatusCode != http.StatusNotFound {
+			t.Fatalf("DownloadData err = %v, want 404 apiError", err)
+		}
+		err = client.DownloadAttachment(context.Background(), "99", "a.txt", existing)
+		if !errors.As(err, &ae) || ae.StatusCode != http.StatusNotFound {
+			t.Fatalf("DownloadAttachment err = %v, want 404 apiError", err)
+		}
+
+		got, err := os.ReadFile(existing)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "precious data" {
+			t.Fatalf("existing file was modified: got %q", string(got))
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("expected no temp files left behind, got %d entries", len(entries))
+		}
+	})
+
+	t.Run("truncated stream cleans up temp file and preserves existing", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Length", "1000")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("partial"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			// Abruptly hijack and close to simulate a broken mid-stream download.
+			if hj, ok := w.(http.Hijacker); ok {
+				conn, _, err := hj.Hijack()
+				if err == nil {
+					_ = conn.Close()
+				}
+			}
+		}))
+		defer srv.Close()
+
+		dir := t.TempDir()
+		existing := filepath.Join(dir, "keep.bin")
+		if err := os.WriteFile(existing, []byte("original"), 0600); err != nil {
+			t.Fatal(err)
+		}
+
+		client := New(srv.URL, StaticTokenProvider("token"))
+		if err := client.DownloadAttachment(context.Background(), "7", "doc.bin", existing); err == nil {
+			t.Fatal("expected error on truncated stream")
+		}
+
+		got, err := os.ReadFile(existing)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "original" {
+			t.Fatalf("existing file corrupted: got %q", string(got))
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("expected temp file to be removed, got %d entries", len(entries))
+		}
+	})
 }
 
 func TestEditMessageSendsDataAndReportsWhetherSent(t *testing.T) {
@@ -180,14 +379,14 @@ func TestEditMessageSendsDataAndReportsWhetherSent(t *testing.T) {
 
 	client := New(srv.URL, &sequenceTokenProvider{})
 	text := "fixed"
-	edited, err := client.EditMessage(7, &text)
+	edited, err := client.EditMessage(context.Background(), 7, &text)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !edited.Sent || edited.ID == nil || *edited.ID != 9 {
 		t.Fatalf("edit result = %+v", edited)
 	}
-	reverted, err := client.EditMessage(7, nil)
+	reverted, err := client.EditMessage(context.Background(), 7, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +413,7 @@ func TestEditFieldsDecodeAndEditMessagesAreHidden(t *testing.T) {
 	defer srv.Close()
 
 	client := New(srv.URL, StaticTokenProvider("token"))
-	items, err := client.ListMessages(20, 0)
+	items, err := client.ListMessages(context.Background(), 20, 0)
 	if err != nil {
 		t.Fatalf("ListMessages: %v", err)
 	}
@@ -247,7 +446,7 @@ func TestDownloadDataRequestsTheOriginalOnlyWhenAsked(t *testing.T) {
 
 	client := New(srv.URL, StaticTokenProvider("token"))
 	for _, original := range []bool{false, true} {
-		if err := client.DownloadDataToWriter("7", original, io.Discard); err != nil {
+		if err := client.DownloadDataToWriter(context.Background(), "7", original, io.Discard); err != nil {
 			t.Fatal(err)
 		}
 	}
