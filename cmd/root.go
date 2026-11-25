@@ -2,12 +2,15 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"slices"
+	"syscall"
 	"unicode"
 
 	"github.com/spf13/cobra"
@@ -83,7 +86,10 @@ func init() {
 // Execute runs the root command and exits on error.
 func Execute() {
 	injectDashDash()
-	if err := rootCmd.Execute(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
+		stop()
 		fmt.Fprintln(os.Stderr, err)
 		if errors.Is(err, errNoEvent) {
 			os.Exit(exitNoEvent)

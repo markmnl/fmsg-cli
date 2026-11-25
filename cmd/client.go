@@ -10,17 +10,11 @@ import (
 
 func newAuthenticatedClient() (*api.Client, *auth.Manager) {
 	apiURL := config.GetAPIURL()
-	transport := api.DefaultTransport()
-
 	manager := auth.NewManager(apiURL)
-	manager.HTTP = &http.Client{
-		Transport: transport,
-		Timeout:   api.DefaultRequestTimeout,
-	}
-
 	client := api.New(apiURL, manager)
-	client.HTTP = &http.Client{
-		Transport: transport,
+	manager.HTTP = &http.Client{
+		Transport: client.HTTP.Transport,
+		Timeout:   api.DefaultRequestTimeout,
 	}
 	return client, manager
 }

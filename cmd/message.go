@@ -9,8 +9,9 @@ import (
 
 // readMessageContent resolves a CLI message content argument:
 //   - "-" reads all bytes from stdin.
-//   - An existing regular file is read from disk; read errors are returned
-//     rather than silently falling back to the filename as literal text.
+//   - An existing non-directory path (regular file, symlink, named pipe /
+//     process substitution, etc.) is read; read errors are returned rather
+//     than silently falling back to the path as literal text.
 //   - Anything else is used directly as literal text.
 func readMessageContent(arg string) ([]byte, error) {
 	if arg == "-" {
@@ -20,7 +21,7 @@ func readMessageContent(arg string) ([]byte, error) {
 		}
 		return data, nil
 	}
-	if info, err := os.Stat(arg); err == nil && info.Mode().IsRegular() {
+	if info, err := os.Stat(arg); err == nil && !info.IsDir() {
 		data, err := os.ReadFile(arg)
 		if err != nil {
 			return nil, fmt.Errorf("reading file %q: %w", arg, err)

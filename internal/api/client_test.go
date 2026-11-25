@@ -8,8 +8,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestClientRefreshesTokenAndRetriesReplayableRequestOn401(t *testing.T) {
@@ -452,5 +454,187 @@ func TestDownloadDataRequestsTheOriginalOnlyWhenAsked(t *testing.T) {
 	}
 	if len(queries) != 2 || queries[0] != "" || queries[1] != "original=true" {
 		t.Fatalf("queries = %q", queries)
+	}
+}
+
+func TestDownloadToFilePermissionsAndSpecialTargets(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("downloaded-bytes"))
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, StaticTokenProvider("token"))
+
+	t.Run("new file respects process umask", func(t *testing.T) {
+		dir := t.TempDir()
+		outPath := filepath.Join(dir, "new.txt")
+		if err := client.DownloadAttachment(context.Background(), "7", "new.txt", outPath); err != nil {
+			t.Fatalf("DownloadAttachment: %v", err)
+		}
+		got, err := os.ReadFile(outPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "downloaded-bytes" {
+			t.Fatalf("content = %q, want %q", string(got), "downloaded-bytes")
+		}
+		if runtime.GOOS != "windows" {
+			refPath := filepath.Join(dir, "ref.txt")
+			ref, err := os.OpenFile(refPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = ref.Close()
+			refInfo, err := os.Stat(refPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			outInfo, err := os.Stat(outPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if outInfo.Mode().Perm() != refInfo.Mode().Perm() {
+				t.Fatalf("new file mode = %o, want umask-derived %o (not forced 0600)", outInfo.Mode().Perm(), refInfo.Mode().Perm())
+			}
+		}
+	})
+
+	t.Run("existing regular file preserves mode", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("POSIX file modes not applicable on Windows")
+		}
+		for _, wantMode := range []os.FileMode{0644, 0640} {
+			dir := t.TempDir()
+			outPath := filepath.Join(dir, "existing.txt")
+			if err := os.WriteFile(outPath, []byte("old"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(outPath, wantMode); err != nil {
+				t.Fatal(err)
+			}
+			if err := client.DownloadAttachment(context.Background(), "7", "existing.txt", outPath); err != nil {
+				t.Fatalf("DownloadAttachment (mode %o): %v", wantMode, err)
+			}
+			got, err := os.ReadFile(outPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != "downloaded-bytes" {
+				t.Fatalf("content = %q, want %q", string(got), "downloaded-bytes")
+			}
+			info, err := os.Stat(outPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.Mode().Perm() != wantMode {
+				t.Fatalf("overwritten file mode = %o, want %o", info.Mode().Perm(), wantMode)
+			}
+		}
+	})
+
+	t.Run("symlink destination writes through without replacing symlink", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlinks may require elevated privileges on Windows")
+		}
+		dir := t.TempDir()
+		target := filepath.Join(dir, "target.txt")
+		if err := os.WriteFile(target, []byte("old"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "link.txt")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		if err := client.DownloadAttachment(context.Background(), "7", "a.txt", link); err != nil {
+			t.Fatalf("DownloadAttachment through symlink: %v", err)
+		}
+		linfo, err := os.Lstat(link)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if linfo.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("expected %s to remain a symlink, got mode %v", link, linfo.Mode())
+		}
+		got, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "downloaded-bytes" {
+			t.Fatalf("target content = %q, want %q", string(got), "downloaded-bytes")
+		}
+	})
+
+	t.Run("dev null works as destination", func(t *testing.T) {
+		if err := client.DownloadAttachment(context.Background(), "7", "a.txt", os.DevNull); err != nil {
+			t.Fatalf("DownloadAttachment(%s): %v", os.DevNull, err)
+		}
+	})
+
+	t.Run("writable file in read-only directory falls back to direct write", func(t *testing.T) {
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			t.Skip("requires non-root POSIX environment")
+		}
+		dir := filepath.Join(t.TempDir(), "ro")
+		if err := os.Mkdir(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		outPath := filepath.Join(dir, "writable.txt")
+		if err := os.WriteFile(outPath, []byte("old"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, 0555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(dir, 0755) })
+
+		if err := client.DownloadData(context.Background(), "7", false, outPath); err != nil {
+			t.Fatalf("DownloadData into read-only dir: %v", err)
+		}
+		got, err := os.ReadFile(outPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "downloaded-bytes" {
+			t.Fatalf("content = %q, want %q", string(got), "downloaded-bytes")
+		}
+	})
+}
+
+func TestInlineBodyRequestsAreNotBoundedByRequestTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(60 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/fmsg":
+			_, _ = w.Write([]byte(`{"id":1}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/fmsg/1":
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPost && r.URL.Path == "/fmsg/1/edit":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":2,"time":1.0,"sha256":"abc"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/fmsg/1":
+			_, _ = w.Write([]byte(`{"from":"@a@example.com"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, StaticTokenProvider("token"))
+	client.RequestTimeout = 20 * time.Millisecond
+
+	if _, err := client.CreateMessage(context.Background(), []byte(`{"data":"big"}`)); err != nil {
+		t.Fatalf("CreateMessage should not be cut off by RequestTimeout: %v", err)
+	}
+	if err := client.UpdateMessage(context.Background(), 1, []byte(`{"data":"big"}`)); err != nil {
+		t.Fatalf("UpdateMessage should not be cut off by RequestTimeout: %v", err)
+	}
+	body := "big"
+	if _, err := client.EditMessage(context.Background(), 1, &body); err != nil {
+		t.Fatalf("EditMessage should not be cut off by RequestTimeout: %v", err)
+	}
+	if _, err := client.GetMessage(context.Background(), "1"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("GetMessage err = %v, want context.DeadlineExceeded", err)
 	}
 }

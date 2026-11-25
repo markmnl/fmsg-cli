@@ -38,23 +38,37 @@ type Manager struct {
 	APIURL string
 	HTTP   *http.Client
 
-	mu       sync.Mutex
-	envCache Credentials
-	now      func() time.Time
+	mu              sync.Mutex
+	envCache        Credentials
+	now             func() time.Time
+	defaultHTTPOnce sync.Once
+	defaultHTTP     *http.Client
 }
 
 // NewManager returns a Manager for the configured fmsg-webapi base URL.
+// Manager.HTTP is left nil so callers can attach a shared transport without
+// allocating a throwaway one; if unset, a default client with timeouts is
+// lazily initialized on first use.
 func NewManager(apiURL string) *Manager {
-	t := http.DefaultTransport.(*http.Transport).Clone()
-	t.ResponseHeaderTimeout = defaultRequestTimeout
 	return &Manager{
 		APIURL: strings.TrimRight(apiURL, "/"),
-		HTTP: &http.Client{
+		now:    time.Now,
+	}
+}
+
+func (m *Manager) httpClient() *http.Client {
+	if m.HTTP != nil {
+		return m.HTTP
+	}
+	m.defaultHTTPOnce.Do(func() {
+		t := http.DefaultTransport.(*http.Transport).Clone()
+		t.ResponseHeaderTimeout = defaultRequestTimeout
+		m.defaultHTTP = &http.Client{
 			Transport: t,
 			Timeout:   defaultRequestTimeout,
-		},
-		now: time.Now,
-	}
+		}
+	})
+	return m.defaultHTTP
 }
 
 // AccessToken returns a valid access token. If forceRefresh is true, the API key
@@ -262,11 +276,7 @@ func (m *Manager) exchange(ctx context.Context, apiKey string) (Token, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client := m.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
+	resp, err := m.httpClient().Do(req)
 	if err != nil {
 		return Token{}, fmt.Errorf("exchanging API key: network error: %w", err)
 	}

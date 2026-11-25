@@ -4,7 +4,10 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -186,12 +189,22 @@ func checkStatus(resp *http.Response) error {
 	return &apiError{StatusCode: resp.StatusCode, Body: readErrorBody(resp.Body, resp.StatusCode)}
 }
 
-// doJSON executes an API request with a request timeout and optional JSON body
-// (either raw []byte or a value to marshal), checks status, and decodes the
-// JSON response into out when non-nil.
+// doJSON executes an API request with RequestTimeout applied to ctx and an
+// optional JSON body (either raw []byte or a value to marshal), checks status,
+// and decodes the JSON response into out when non-nil. Use doJSONUnbounded for
+// requests that upload arbitrary-size inline message bodies so slow uplinks are
+// not cut off while ResponseHeaderTimeout on DefaultTransport still bounds
+// stalled servers.
 func (c *Client) doJSON(ctx context.Context, method, rawURL string, body any, out any) (int, error) {
 	ctx, cancel := c.withRequestTimeout(ctx)
 	defer cancel()
+	return c.doJSONUnbounded(ctx, method, rawURL, body, out)
+}
+
+func (c *Client) doJSONUnbounded(ctx context.Context, method, rawURL string, body any, out any) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	var payload []byte
 	switch v := body.(type) {
@@ -410,7 +423,7 @@ func (c *Client) GetMessage(ctx context.Context, id string) (*Message, error) {
 // CreateMessage creates a new draft message. body is optional JSON payload.
 func (c *Client) CreateMessage(ctx context.Context, body []byte) (*CreateMessageResponse, error) {
 	var resp CreateMessageResponse
-	if _, err := c.doJSON(ctx, http.MethodPost, c.BaseURL+"/fmsg", body, &resp); err != nil {
+	if _, err := c.doJSONUnbounded(ctx, http.MethodPost, c.BaseURL+"/fmsg", body, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -448,7 +461,7 @@ type EditMessageResponse struct {
 // (FMSG-008), or reverts it to the original when data is nil.
 func (c *Client) EditMessage(ctx context.Context, id int64, data *string) (*EditMessageResponse, error) {
 	var result EditMessageResponse
-	status, err := c.doJSON(ctx, http.MethodPost, c.messageIDPath(id)+"/edit", map[string]any{"data": data}, &result)
+	status, err := c.doJSONUnbounded(ctx, http.MethodPost, c.messageIDPath(id)+"/edit", map[string]any{"data": data}, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -594,9 +607,43 @@ func (c *Client) UploadAttachment(ctx context.Context, messageID, filePath strin
 	return &result, nil
 }
 
+func createDownloadTempFile(dir string, perm os.FileMode) (*os.File, error) {
+	var buf [8]byte
+	for range 16 {
+		if _, err := rand.Read(buf[:]); err != nil {
+			return nil, err
+		}
+		name := filepath.Join(dir, ".fmsg-download-"+hex.EncodeToString(buf[:]))
+		f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		return f, err
+	}
+	return nil, fmt.Errorf("could not allocate unique temp file in %s", dir)
+}
+
+func writeStreamDirect(outputPath string, flags int, perm os.FileMode, r io.Reader) error {
+	out, err := os.OpenFile(outputPath, flags, perm)
+	if err != nil {
+		return fmt.Errorf("creating output file: %w", err)
+	}
+	if _, err := io.Copy(out, r); err != nil {
+		_ = out.Close()
+		return fmt.Errorf("writing output file: %w", err)
+	}
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("closing output file: %w", err)
+	}
+	return nil
+}
+
 // downloadToFile fetches rawURL, verifies a 2xx status before touching the
-// filesystem, streams into a temp file next to outputPath, and atomically
-// renames it into place.
+// filesystem, and writes the response body to outputPath. New and existing
+// regular files are streamed into a sibling temp file and atomically renamed
+// into place (respecting the process umask for new files and preserving mode
+// for existing ones); symlinks, devices, pipes, and writable files in
+// read-only directories are written directly.
 func (c *Client) downloadToFile(ctx context.Context, rawURL, outputPath string) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -616,8 +663,24 @@ func (c *Client) downloadToFile(ctx context.Context, rawURL, outputPath string) 
 		return err
 	}
 
-	out, err := os.CreateTemp(filepath.Dir(outputPath), ".fmsg-download-*")
+	info, err := os.Lstat(outputPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("checking output file: %w", err)
+	}
+	existingRegular := err == nil && info.Mode().IsRegular()
+	if err == nil && !existingRegular {
+		return writeStreamDirect(outputPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666, resp.Body)
+	}
+
+	tempPerm := os.FileMode(0666)
+	if existingRegular {
+		tempPerm = 0600
+	}
+	out, err := createDownloadTempFile(filepath.Dir(outputPath), tempPerm)
 	if err != nil {
+		if existingRegular && errors.Is(err, os.ErrPermission) {
+			return writeStreamDirect(outputPath, os.O_WRONLY|os.O_TRUNC, info.Mode().Perm(), resp.Body)
+		}
 		return fmt.Errorf("creating output file: %w", err)
 	}
 	tmpPath := out.Name()
@@ -631,6 +694,12 @@ func (c *Client) downloadToFile(ctx context.Context, rawURL, outputPath string) 
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		_ = out.Close()
 		return fmt.Errorf("writing output file: %w", err)
+	}
+	if existingRegular {
+		if err := out.Chmod(info.Mode().Perm()); err != nil {
+			_ = out.Close()
+			return fmt.Errorf("setting output file permissions: %w", err)
+		}
 	}
 	if err := out.Close(); err != nil {
 		return fmt.Errorf("closing output file: %w", err)
@@ -657,7 +726,7 @@ func (c *Client) DeleteAttachment(ctx context.Context, messageID, filename strin
 
 // UpdateMessage updates a draft message by ID.
 func (c *Client) UpdateMessage(ctx context.Context, id int64, body []byte) error {
-	_, err := c.doJSON(ctx, http.MethodPut, c.messageIDPath(id), body, nil)
+	_, err := c.doJSONUnbounded(ctx, http.MethodPut, c.messageIDPath(id), body, nil)
 	return err
 }
 

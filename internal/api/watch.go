@@ -50,9 +50,13 @@ type WatchOptions struct {
 	// OnConnect is called after every successful handshake (including
 	// reconnects), before any event from that connection is delivered.
 	OnConnect func()
-	// Reconnect re-dials with backoff when the connection drops or a transient
-	// dial failure (network error or 5xx handshake response) occurs. Auth errors
-	// and 4xx handshake failures (other than a single 401 token refresh retry)
+	// OnRetry is called before sleeping on a reconnect retry with the error
+	// that triggered the retry and the backoff wait duration.
+	OnRetry func(err error, wait time.Duration)
+	// Reconnect re-dials with backoff after an established connection drops
+	// and retries transient dial failures (network error or 5xx handshake
+	// response) while reconnecting. Initial dial failures, auth errors, and
+	// 4xx handshake failures (other than a single 401 token refresh retry)
 	// fail fast.
 	Reconnect bool
 	// Dialer overrides the WebSocket dialer (tests).
@@ -66,11 +70,12 @@ const (
 	maxWatchMessageBytes = 4 << 20
 )
 
-// Backoff and health parameters (vars so unit tests can shorten them).
+// Backoff and health parameters (vars so unit tests can override them).
 var (
 	watchInitialBackoff  = time.Second
 	watchMaxBackoff      = 30 * time.Second
 	watchHealthyDuration = 30 * time.Second
+	watchSleep           = waitBackoff
 )
 
 func nextWatchBackoff(cur time.Duration) time.Duration {
@@ -97,22 +102,27 @@ func waitBackoff(ctx context.Context, d time.Duration) error {
 // connection drops.
 func (c *Client) Watch(ctx context.Context, opts WatchOptions, fn WatchHandler) error {
 	backoff := watchInitialBackoff
+	everConnected := false
 	for {
 		conn, err := c.dialWatch(ctx, opts.Dialer)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			if !opts.Reconnect || !isTransientDialError(err) {
+			if !opts.Reconnect || !everConnected || !isTransientDialError(err) {
 				return err
 			}
-			if err := waitBackoff(ctx, backoff); err != nil {
+			if opts.OnRetry != nil {
+				opts.OnRetry(err, backoff)
+			}
+			if err := watchSleep(ctx, backoff); err != nil {
 				return err
 			}
 			backoff = nextWatchBackoff(backoff)
 			continue
 		}
 
+		everConnected = true
 		connectedAt := time.Now()
 		if opts.OnConnect != nil {
 			opts.OnConnect()
@@ -135,7 +145,10 @@ func (c *Client) Watch(ctx context.Context, opts WatchOptions, fn WatchHandler) 
 		if eventsRead > 0 || time.Since(connectedAt) >= watchHealthyDuration {
 			backoff = watchInitialBackoff
 		}
-		if err := waitBackoff(ctx, backoff); err != nil {
+		if opts.OnRetry != nil {
+			opts.OnRetry(err, backoff)
+		}
+		if err := watchSleep(ctx, backoff); err != nil {
 			return err
 		}
 		backoff = nextWatchBackoff(backoff)
